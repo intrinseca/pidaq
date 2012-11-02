@@ -1,0 +1,12 @@
+syntax = "proto2";
+
+message Sample {
+	optional int32 timestamp = 1;
+	optional int32 value = 2;
+}
+
+message Samples
+{
+	optional int32 channel = 1;
+	repeated Sample data = 2;
+}

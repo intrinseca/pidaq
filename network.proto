@@ -1,0 +1,6 @@
+syntax = "proto2";
+import "samples.proto";
+
+message network_message {
+	optional Sample sample = 1;
+}
