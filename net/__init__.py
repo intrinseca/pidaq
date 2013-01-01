@@ -27,7 +27,6 @@ class SamplesFactory(Factory):
 class SamplesServerFactory(protocol.ServerFactory):
     protocol = SamplesProtocol
 
-
 class ProtobufProtocol(Int32StringReceiver):
   def sendMessage(self, message):
     print("ProtobufProtocol: Sending")

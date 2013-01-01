@@ -11,10 +11,10 @@ s.value = 1024
 print(s)
 
 def gotProtocol(p):
-  m = network_pb2.network_message()
-  m.sample.CopyFrom(s)
-  p.sendMessage(m)
-  p.transport.loseConnection()
+    m = network_pb2.network_message()
+    m.sample.CopyFrom(s)
+    p.sendMessage(m)
+    p.transport.loseConnection()
 
 point = TCP4ClientEndpoint(reactor, "localhost", 1234)
 d = point.connect(ProtobufProtocolFactory())
