@@ -9,6 +9,8 @@ from Phidgets import PhidgetException
 from twisted.internet.task import LoopingCall
 import time
 from twisted.internet.protocol import Factory
+from Queue import Queue, Empty
+from twisted.internet.error import ConnectionDone
 
 class PhidgetSourceProtocol(SampleStreamProtocol):
     implements(interfaces.IPushProducer)
@@ -17,6 +19,7 @@ class PhidgetSourceProtocol(SampleStreamProtocol):
         SampleStreamProtocol.connectionMade(self)
         
         self._paused = False
+        self._samples = Queue(100)
         
         try:
             self._device = InterfaceKit()
@@ -34,12 +37,15 @@ class PhidgetSourceProtocol(SampleStreamProtocol):
         self._device.waitForAttach(10000)
         
         self._device.setSensorChangeTrigger(0, 0)
-        self._device.setDataRate(0, 100)
+        self._device.setDataRate(0, 1000)
         
         print("Phidget: Connected")
         self.transport.registerProducer(self, True)
         self.resumeProducing()
-        
+    
+    def connectionLost(self, reason=ConnectionDone):
+        self.stopProducing()
+    
     def pauseProducing(self):
         self._paused = True
         
@@ -51,8 +57,19 @@ class PhidgetSourceProtocol(SampleStreamProtocol):
         self._device.closePhidget()
     
     def sensorChanged(self, e):
-        if not self._paused:
-            self.sendSample(int(time.time()), e.value)
+        self._samples.put(e.value)
+        
+        if not self._paused and self._samples.qsize > 10:
+            reactor.callFromThread(self.sendSamples)
+    
+    def sendSamples(self):
+        while not self._paused:
+            try:
+                sample = self._samples.get_nowait()
+                self.sendSample(int(time.time()), sample)
+            except Empty:
+                break
+        
 
 class PhidgetSourceProtocolFactory(Factory):
     def buildProtocol(self, addr):
