@@ -15,6 +15,9 @@ class ProtobufProtocol(Int32StringReceiver):
         print("ProtobufProtocol: Received")
         message = network_pb2.network_message()
         message.ParseFromString(data)
+        self.messageReceived(message)
+    
+    def messageReceived(self, message):
         print(message)
   
     def connectionMade(self):
@@ -29,11 +32,7 @@ class ProtobufProtocolFactory(Factory):
         return ProtobufProtocol()
 
 class SampleStreamProtocol(ProtobufProtocol):
-    def sendSample(self, timestamp, value):
-        s = samples_pb2.Sample()
-        s.timestamp = timestamp
-        s.value = value
-        
+    def sendSample(self, timestamp, value):      
         m = network_pb2.network_message()
         m.sample.timestamp = timestamp
         m.sample.value = value
