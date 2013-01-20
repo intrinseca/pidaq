@@ -2,3 +2,4 @@ protoc.exe
 *.pyc
 .settings/*
 protobuf/*_pb2.py
+*.prl
