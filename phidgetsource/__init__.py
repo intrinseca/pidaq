@@ -28,30 +28,31 @@ class PhidgetSourceProtocol(SampleStreamProtocol):
         except PhidgetException as e:
             print("Phidget Exception %i: %s" % (e.code, e.detail))
         
-        self._sampleLoop = LoopingCall(self.takeSample)
+        self._device.setOnSensorChangeHandler(self.sensorChanged)
+        
         print("Phidget: Waiting for Connection")
         self._device.waitForAttach(10000)
+        
+        self._device.setSensorChangeTrigger(0, 0)
+        self._device.setDataRate(0, 100)
+        
         print("Phidget: Connected")
         self.transport.registerProducer(self, True)
         self.resumeProducing()
         
     def pauseProducing(self):
         self._paused = True
-        self._sampleLoop.stop()
         
     def resumeProducing(self):
         self._paused = False
-        self._sampleLoop.start(1)
         
     def stopProducing(self):
         self._paused = True
-        self._sampleLoop.stop()
         self._device.closePhidget()
     
-    def takeSample(self):
-        value = self._device.getSensorValue(0)
-        
-        self.sendSample(int(time.time()), value)
+    def sensorChanged(self, e):
+        if not self._paused:
+            self.sendSample(int(time.time()), e.value)
 
 class PhidgetSourceProtocolFactory(Factory):
     def buildProtocol(self, addr):
