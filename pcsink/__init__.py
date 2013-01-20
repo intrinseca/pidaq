@@ -9,9 +9,10 @@ class SampleLog(ProtobufProtocol):
         self._logFile = logFile
     
     def messageReceived(self, message):
-        print("%d %d" % (message.sample.timestamp, message.sample.value))
-        self._logFile.write(message.sample.SerializeToString() + "\n")
-        self._logFile.flush()
+#        print("%d %d" % (message.sample.timestamp, message.sample.value))
+#        self._logFile.write(message.sample.SerializeToString() + "\n")
+#        self._logFile.flush()
+        print(message)
 
 class SampleLogFactory(ClientFactory):
     def startFactory(self):

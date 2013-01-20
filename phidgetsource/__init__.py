@@ -37,7 +37,7 @@ class PhidgetSourceProtocol(SampleStreamProtocol):
         self._device.waitForAttach(10000)
         
         self._device.setSensorChangeTrigger(0, 0)
-        self._device.setDataRate(0, 1000)
+        self._device.setDataRate(0, 128)
         
         print("Phidget: Connected")
         self.transport.registerProducer(self, True)
@@ -59,16 +59,21 @@ class PhidgetSourceProtocol(SampleStreamProtocol):
     def sensorChanged(self, e):
         self._samples.put(e.value)
         
-        if not self._paused and self._samples.qsize > 10:
+        if not self._paused and self._samples.qsize() >= 10:
             reactor.callFromThread(self.sendSamples)
     
     def sendSamples(self):
-        while not self._paused:
-            try:
-                sample = self._samples.get_nowait()
-                self.sendSample(int(time.time()), sample)
-            except Empty:
-                break
+        if not self._paused:
+            message = network_pb2.network_message()
+            
+            while not self._paused:
+                try:
+                    sample = self._samples.get_nowait()
+                    message.sample_stream.sample.append(sample)
+                except Empty:
+                    break
+            
+            self.sendMessage(message)
         
 
 class PhidgetSourceProtocolFactory(Factory):

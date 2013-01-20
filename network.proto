@@ -3,4 +3,5 @@ import "samples.proto";
 
 message network_message {
 	optional Sample sample = 1;
+	optional sample_stream sample_stream = 2;
 }
