@@ -37,7 +37,7 @@ class PhidgetSourceProtocol(SampleStreamProtocol):
         self._device.waitForAttach(10000)
         
         self._device.setSensorChangeTrigger(0, 0)
-        self._device.setDataRate(0, 128)
+        self._device.setDataRate(0, 64)
         
         print("Phidget: Connected")
         self.transport.registerProducer(self, True)
@@ -65,7 +65,9 @@ class PhidgetSourceProtocol(SampleStreamProtocol):
     def sendSamples(self):
         if not self._paused:
             message = network_pb2.network_message()
-            
+            message.sample_stream.channel = 0
+            message.sample_stream.rate = 128
+                        
             while not self._paused:
                 try:
                     sample = self._samples.get_nowait()
