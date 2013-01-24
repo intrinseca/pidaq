@@ -9,6 +9,7 @@ from twisted.internet.task import LoopingCall
 from twisted.python import log
 from zope.interface import implements
 import time
+import math
 
 class DummySourceProtocol(SampleStreamProtocol):
     implements(interfaces.IPushProducer)
@@ -18,6 +19,7 @@ class DummySourceProtocol(SampleStreamProtocol):
         
         self._paused = False
         self._samples = Queue(100)
+        self._sampleNumber = 0
         
         self._timer = LoopingCall(self.takeSample)
         
@@ -41,7 +43,9 @@ class DummySourceProtocol(SampleStreamProtocol):
         self._timer.stop()
     
     def takeSample(self):
-        self._samples.put(100)
+        self._sampleNumber += 1
+        
+        self._samples.put(int(512 + math.sin(self._sampleNumber * 0.1) * 512))
         
         if not self._paused and self._samples.qsize() >= 10:
             reactor.callFromThread(self.sendSamples)
