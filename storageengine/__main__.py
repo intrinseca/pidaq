@@ -8,7 +8,7 @@ control = ControlFactory()
 
 control.store = store
 
-reactor.listenTCP(1235, control) #@UndefinedVariable
-reactor.connectTCP("localhost", 1234, store) #@UndefinedVariable
-reactor.run() #@UndefinedVariable
+reactor.listenTCP(1235, control)
+reactor.connectTCP("localhost", 1234, store)
+reactor.run()
     
