@@ -8,11 +8,13 @@ from uuid import UUID, uuid1
 import os
 
 class Block:
+    size = 10
+    
     def __init__(self, index):
         self.reset(index)
     
     def full(self):
-        return len(self.samples) >= 10
+        return len(self.samples) >= Block.size
     
     def reset(self, index):
         self.block_number = index
@@ -89,7 +91,6 @@ class StorageProtocol(ProtobufProtocol):
     def __init__(self, block_pool):
         self.session_id = UUID(int=0)
         self.persistent_session = False
-        self.session = []
         
         self.block_pool = block_pool
         self._current_block = self.block_pool.get()
@@ -98,8 +99,14 @@ class StorageProtocol(ProtobufProtocol):
     def start_session(self, session_id, persistent=True):
         self.session_id = session_id
         self.persistent_session = True
-        self.session = []
-    
+        self._new_block()    
+
+    def _new_block(self):
+        self.block_pool.write(self._current_block)
+        self._current_block = self.block_pool.get()
+        self._current_block.session_id = self.session_id
+        self._current_block.persist = self.persistent_session
+
     def messageReceived(self, message):
         samples = message.sample_stream.sample
         print(samples)
@@ -107,10 +114,7 @@ class StorageProtocol(ProtobufProtocol):
         i = 0
         while i < len(samples):
             if self._current_block.full():
-                self.block_pool.write(self._current_block)
-                self._current_block = self.block_pool.get()
-                self._current_block.session_id = self.session_id
-                self._current_block.persist = self.persistent_session
+                self._new_block()
             
             self._current_block.samples.append(samples[i])
             i += 1
