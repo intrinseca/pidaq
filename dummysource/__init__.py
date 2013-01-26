@@ -29,6 +29,7 @@ class DummySourceProtocol(SampleStreamProtocol):
     
     def connectionLost(self, reason=ConnectionDone):
         self.stopProducing()
+        print("DummySource: Disconnected")
     
     def pauseProducing(self):
         self._timer.stop()
@@ -40,7 +41,8 @@ class DummySourceProtocol(SampleStreamProtocol):
         
     def stopProducing(self):
         self._paused = True
-        self._timer.stop()
+        if self._timer.running:
+            self._timer.stop()
     
     def takeSample(self):
         self._sampleNumber += 1
