@@ -3,7 +3,7 @@ from net import ProtobufProtocol
 from protobuf import samples_pb2
 from twisted.internet import reactor
 from twisted.internet.error import ConnectionDone
-from twisted.internet.protocol import ClientFactory
+from twisted.internet.protocol import ReconnectingClientFactory
 from uuid import UUID, uuid1
 import os
 
@@ -68,7 +68,10 @@ class BlockPool:
     def _process_write_queue(self):
         while not self.stop_write:
             block = self.write_queue.get()
+            #print("Block %d in write queue, persist: %r" % (block.block_number, block.persist))
+            
             if block.persist:
+                #print("Writing block %d" % block.block_number)
                 path = os.path.join(self.file_root, str(block.session_id))
                 if not os.path.isdir(path):
                     os.mkdir(path)
@@ -98,7 +101,7 @@ class StorageProtocol(ProtobufProtocol):
     
     def start_session(self, session_id, persistent=True):
         self.session_id = session_id
-        self.persistent_session = True
+        self.persistent_session = persistent
         self._new_block()    
 
     def _new_block(self):
@@ -122,7 +125,7 @@ class StorageProtocol(ProtobufProtocol):
     def connectionLost(self, reason=ConnectionDone):
         pass
 
-class StorageFactory(ClientFactory):
+class StorageFactory(ReconnectingClientFactory):
     def __init__(self):
         self.protocols = []
         
@@ -133,7 +136,8 @@ class StorageFactory(ClientFactory):
         protocol = StorageProtocol(self.block_pool)
         protocol.factory = self
         self.protocols.append(protocol)
-        protocol.start_session(uuid1())
+        protocol.start_session(uuid1(), True)
+        self.resetDelay()
         return protocol
     
     def stopFactory(self):
