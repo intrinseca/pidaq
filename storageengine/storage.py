@@ -79,6 +79,7 @@ class BlockPool:
                 stream = samples_pb2.sample_stream()
                 stream.timestamp = block.timestamp
                 stream.session_id = block.session_id.bytes
+                stream.machine_id = self.machine_id
                 stream.channel = block.channel
                 stream.sample.extend(block.samples)
                 

@@ -12,4 +12,5 @@ message sample_stream
 	optional int64 timestamp = 3;
 	repeated int32 sample = 4 [packed=true];
 	optional bytes session_id = 5;
+	optional bytes machine_id = 6;
 }
