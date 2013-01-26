@@ -1,4 +1,5 @@
 from Queue import Queue
+from google.protobuf import text_format
 from net import ProtobufProtocol
 from protobuf import samples_pb2
 from twisted.internet import reactor
@@ -6,10 +7,12 @@ from twisted.internet.error import ConnectionDone
 from twisted.internet.protocol import ReconnectingClientFactory
 from uuid import UUID, uuid1
 import os
+import struct
+import uuid
 
 class Session:
-    def __init__(self, id):
-        self.id = id
+    def __init__(self, sid):
+        self.sid = sid
         self.sample_count = 0
 
 class Block:
@@ -90,6 +93,7 @@ class BlockPool:
                 
                 stream_file = open(os.path.join(path, str(block.block_number)), "w")
                 stream_file.write(stream.SerializeToString())
+                #text_format.PrintMessage(stream, stream_file)
                 stream_file.close()
                 
                 block.written = True
@@ -113,7 +117,7 @@ class StorageProtocol(ProtobufProtocol):
     def _new_block(self):
         self.block_pool.write(self._current_block)
         self._current_block = self.block_pool.get()
-        self._current_block.session_id = self.session.id
+        self._current_block.session_id = self.session.sid
         self._current_block.persist = self.persistent_session
         self._current_block.timestamp = self.session.sample_count
 
@@ -137,8 +141,12 @@ class StorageFactory(ReconnectingClientFactory):
     def __init__(self):
         self.protocols = []
         
-        path = os.path.join(os.getcwd(), "storage")        
-        self.block_pool = BlockPool(machine_id=[0x00] * 6, file_root=path, pool_size=10)
+        path = os.path.join(os.getcwd(), "storage")
+        
+        #uuid.getnode will usually return the system mac address as a 48 bit int
+        #struct.pack for a long long (Q) gives eight bytes, so we slice off the first six
+        mac = struct.pack("Q", uuid.getnode())[0:5]
+        self.block_pool = BlockPool(machine_id=mac, file_root=path, pool_size=10)
     
     def buildProtocol(self, addr):
         protocol = StorageProtocol(self.block_pool)
