@@ -1,4 +1,5 @@
-from phidgetsource import *
+from phidgetsource import PhidgetSourceProtocolFactory
+from twisted.internet import reactor
 
 if __name__ == '__main__':
     print("Starting PhidgetSource")
