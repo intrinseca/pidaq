@@ -1,11 +1,14 @@
 from net import ProtobufProtocol
-from twisted.internet.protocol import ReconnectingClientFactory
-from twisted.protocols import basic
 from protobuf.network_pb2 import network_message, storage_command
+from twisted.internet.protocol import ReconnectingClientFactory, Factory
+from twisted.protocols import basic
 from uuid import uuid1
 
 class CLI(basic.LineReceiver):
     from os import linesep as delimiter
+
+    def __init__(self, control):
+        self.control = control
 
     def connectionMade(self):
         self.transport.write('>>> ')
@@ -22,6 +25,13 @@ class CLI(basic.LineReceiver):
             self.control.sendCommand(command)            
         
         self.transport.write('>>> ')
+
+class CLIFactory(Factory):
+    def __init__(self, control):
+        self.control = control
+    
+    def buildProtocol(self, addr):
+        return CLI(self.control)
 
 class StorageEngineControl(ProtobufProtocol):
     pass
