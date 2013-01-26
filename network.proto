@@ -4,4 +4,11 @@ import "samples.proto";
 message network_message {
 	optional Sample sample = 1;
 	optional sample_stream sample_stream = 2;
+	optional storage_command storage_command = 3;
+}
+
+message storage_command {
+	optional bool start_session = 1;
+	optional bool stop_session = 2;
+	optional bytes session_id = 3;
 }

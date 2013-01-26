@@ -114,6 +114,11 @@ class StorageProtocol(ProtobufProtocol):
         self.persistent_session = persistent
         self._new_block()    
 
+    def stop_session(self):
+        self.session = Session(UUID(int=0))
+        self.persistent_session = False
+        self._new_block()
+
     def _new_block(self):
         self.block_pool.write(self._current_block)
         self._current_block = self.block_pool.get()
@@ -152,11 +157,19 @@ class StorageFactory(ReconnectingClientFactory):
         protocol = StorageProtocol(self.block_pool)
         protocol.factory = self
         self.protocols.append(protocol)
-        protocol.start_session(Session(uuid1()), True)
+        protocol.start_session(Session(UUID(int=0)), False)
         self.resetDelay()
         return protocol
     
     def stopFactory(self):
         self.block_pool.stop_workers()
+    
+    def start_session(self, sid):
+        for p in self.protocols:
+            p.start_session(Session(sid), True)
+            
+    def stop_session(self):
+        for p in self.protocols:
+            p.stop_session()
         
         
