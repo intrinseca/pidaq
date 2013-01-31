@@ -5,8 +5,6 @@ from twisted.protocols import basic
 from uuid import uuid1
 
 class CLI(basic.LineReceiver):
-    from os import linesep as delimiter
-
     def __init__(self, control):
         self.control = control
 
@@ -15,14 +13,17 @@ class CLI(basic.LineReceiver):
 
     def lineReceived(self, line):
         if line == "start":
+            sid = uuid1()
             command = network_message()
             command.storage_command.start_session = True
-            command.storage_command.session_id = uuid1().bytes
+            command.storage_command.session_id = sid.bytes
             self.control.sendCommand(command)
+            self.transport.write("Started session %s\r\n" % str(sid))
         elif line == "stop":
             command = network_message()
             command.storage_command.stop_session = True
-            self.control.sendCommand(command)            
+            self.control.sendCommand(command)   
+            self.transport.write("Session ended\r\n")         
         
         self.transport.write('>>> ')
 
