@@ -1,11 +1,7 @@
-from protobuf import samples_pb2
-from protobuf.samples_pb2 import sample_stream
-
-from storageengine.storage import Session, Block
+from storageengine.storage import Session
 
 import os
 import pylab
-from uuid import UUID
 
 #get session list
 sessions = os.listdir("storage")
