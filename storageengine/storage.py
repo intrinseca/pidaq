@@ -29,8 +29,7 @@ class Session:
         samples = []
         for block_id in self.blocks:
             block_file = open(os.path.join("storage", self.path(), str(block_id)), "rb")
-            block = Block(0)
-            block.deserialize(block_file.read(), self)
+            block = Block.deserialize(block_file.read(), self)
             samples.extend(block.samples)
         
         return samples
@@ -86,17 +85,21 @@ class Block:
         return stream.SerializeToString()
         #return text_format.MessageToString(stream)
     
-    def deserialize(self, serialized, session):
+    @staticmethod
+    def deserialize(serialized, session):
         stream = samples_pb2.sample_stream()
         stream.ParseFromString(serialized)
         #text_format.Merge(serialized, stream)
         
         assert(stream.session_id == session.sid.bytes)
         
-        self.session = session
-        self.timestamp = stream.timestamp
-        self.channel = stream.channel
-        self.samples = stream.sample
+        b = Block(0)
+        b.session = session
+        b.timestamp = stream.timestamp
+        b.channel = stream.channel
+        b.samples = stream.sample
+        
+        return b
         
 class BlockPoolError(Exception):
     pass
