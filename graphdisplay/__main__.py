@@ -18,24 +18,12 @@ for folder in sessions:
 
 #session chooser
 session_dir = sessions[0]
-session = Session(UUID(session_dir))
-block_files = os.listdir(os.path.join("storage", session_dir))
 
-blocks = []
-samples = []
+session_index = open(os.path.join("storage", session_dir, "index"), "rb")
+session = Session.deserialise(session_index.read())
+session_index.close()
 
-for block_path in block_files:
-    print(block_path)
-    block_file = open(os.path.join("storage", session_dir, block_path), "rb")
-    
-    block = Block(0)
-    block.deserialize(block_file.read(), session)
-    blocks.append(block)
-    
-blocks = sorted(blocks, key = lambda x: x.timestamp)
-
-for block in blocks:
-    samples.extend(block.samples)
+samples = session.query()
 
 pylab.plot(samples)
 pylab.grid()

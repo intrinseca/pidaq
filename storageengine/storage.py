@@ -24,6 +24,34 @@ class Session:
     
     def path(self):
         return str(self.sid)
+    
+    def query(self):
+        samples = []
+        for block_id in self.blocks:
+            block_file = open(os.path.join("storage", self.path(), str(block_id)), "rb")
+            block = Block(0)
+            block.deserialize(block_file.read(), self)
+            samples.extend(block.samples)
+        
+        return samples
+    
+    def serialize(self):
+        session = samples_pb2.session()
+        session.session_id = self.sid.bytes
+        session.blocks.extend(map(lambda x: x.bytes, self.blocks))
+        #return session.SerializeToString()
+        return text_format.MessageToString(session)
+    
+    @staticmethod
+    def deserialise(serialized):
+        session_pb = samples_pb2.session()
+        #session_pb.ParseFromString(serialized)
+        text_format.Merge(serialized, session_pb)
+        
+        session = Session(UUID(bytes=session_pb.session_id))
+        session.blocks = map(lambda x: UUID(bytes=x), session_pb.blocks)
+        
+        return session
 
 class Block:
     size = 10
@@ -141,6 +169,10 @@ class StorageProtocol(ProtobufProtocol):
         self._new_block()
 
     def stop_session(self):
+        stream_file = open(os.path.join(self.block_pool.file_root, self.session.path(), "index"), "wb")
+        stream_file.write(self.session.serialize())
+        stream_file.close()
+        
         self.session = Session(UUID(int=0))
         self.persistent_session = False
         self._new_block()
