@@ -7,12 +7,12 @@ from protobuf import network_pb2, samples_pb2
 
 class ProtobufProtocol(Int32StringReceiver):
     def sendMessage(self, message):
-        print("ProtobufProtocol: Sending")
+        #print("ProtobufProtocol: Sending")
         self.sendString(message.SerializeToString())
-        print("ProtobufProtocol: Sent")
+        #print("ProtobufProtocol: Sent")
   
     def stringReceived(self, data):
-        print("ProtobufProtocol: Received")
+        #print("ProtobufProtocol: Received")
         message = network_pb2.network_message()
         message.ParseFromString(data)
         self.messageReceived(message)

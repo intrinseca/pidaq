@@ -53,7 +53,7 @@ class Session:
         return session
 
 class Block:
-    size = 10
+    size = 1000
     
     def __init__(self, index):
         self.reset(index)
@@ -193,7 +193,7 @@ class StorageProtocol(ProtobufProtocol):
 
     def messageReceived(self, message):
         samples = message.sample_stream.sample
-        print(samples)
+        #print(samples)
         
         if self.session:
             i = 0
@@ -231,10 +231,12 @@ class StorageFactory(ReconnectingClientFactory):
         self.block_pool.stop_workers()
     
     def start_session(self, sid):
+	print("Starting Session %s" % str(sid))
         for p in self.protocols:
             p.start_session(Session(sid, persistent=True))
             
     def stop_session(self):
+	print("Stopping Session")
         for p in self.protocols:
             p.stop_session()
         
