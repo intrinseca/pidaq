@@ -120,7 +120,7 @@ class BlockPool:
                 if not os.path.isdir(path):
                     os.mkdir(path)
                 
-                stream_file = open(os.path.join(self.file_root, block.path()), "w")
+                stream_file = open(os.path.join(self.file_root, block.path()), "wb")
                 stream_file.write(block.serialize())
                 stream_file.close()
                 

@@ -26,7 +26,7 @@ samples = []
 
 for block_path in block_files:
     print(block_path)
-    block_file = open(os.path.join("storage", session_dir, block_path), "r")
+    block_file = open(os.path.join("storage", session_dir, block_path), "rb")
     
     block = Block(0)
     block.deserialize(block_file.read(), session)
