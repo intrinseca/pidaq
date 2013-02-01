@@ -120,6 +120,7 @@ class BlockPool:
         self.pool_size = pool_size
         self.file_root = file_root
         
+        self.blocks = []
         self.pool = [Block() for i in range(pool_size)] #@UnusedVariable
         self._next_free = 0
         
@@ -128,7 +129,7 @@ class BlockPool:
         
         reactor.callInThread(self._process_write_queue)
     
-    def get(self):
+    def get_free(self):
         if self._next_free >= self.pool_size:
             self._next_free = 0
         
@@ -137,10 +138,12 @@ class BlockPool:
         if not next_block.free:
             if next_block.session.persistent and not next_block.written:
                 raise BlockPoolError("Potential data loss - need to overwrite unsaved data")
+            self.blocks.remove(next_block.block_id)
             next_block.reset()
         
         self._next_free += 1
         next_block.free = False
+        self.blocks.append(next_block.block_id)
         return next_block
     
     def write(self, block):
@@ -194,7 +197,7 @@ class StorageProtocol(ProtobufProtocol):
         if self._current_block:
             self.block_pool.write(self._current_block)
                 
-        self._current_block = self.block_pool.get()
+        self._current_block = self.block_pool.get_free()
         self._current_block.session = self.session
         self._current_block.timestamp = self.session.sample_count
         
