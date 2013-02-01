@@ -1,7 +1,7 @@
 from storageengine.storage import Session
+from graphdisplay import plot_samples
 
 import os
-import pylab
 
 #get session list
 sessions = os.listdir("storage")
@@ -21,6 +21,4 @@ session_index.close()
 
 samples = session.query(start=25, end=125)
 
-pylab.plot(samples)
-pylab.grid()
-pylab.show()
+plot_samples(samples)

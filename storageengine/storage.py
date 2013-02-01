@@ -1,6 +1,7 @@
 from Queue import Queue
 from google.protobuf import text_format
 from net import ProtobufProtocol
+from graphdisplay import plot_samples
 from protobuf import samples_pb2
 from twisted.internet import reactor
 from twisted.internet.error import ConnectionDone
@@ -11,6 +12,12 @@ import os
 import struct
 import uuid
 
+
+class BlockPoolError(Exception):
+    pass
+
+class StorageError(Exception):
+    pass
 
 class Session:
     def __init__(self, sid, persistent=False):
@@ -31,17 +38,31 @@ class Session:
         samples = []
         
         start_block = int(math.floor(start / Block.size))
-        
-        if not end:
-            blocks = self.blocks[start_block:]
-        else:
+        if end:
             end_block = int(math.ceil(end / Block.size))
-            blocks = self.blocks[start_block:end_block + 1]
         
-        for block_id in blocks:
-            block_file = open(os.path.join("storage", self.path(), str(block_id)), "rb")
-            block = Block.deserialize(block_file.read(), self)
-            samples.extend(block.samples)
+        if self.persistent:
+            
+            if not end:
+                blocks = self.blocks[start_block:]
+            else:
+                end_block = int(math.ceil(end / Block.size))
+                blocks = self.blocks[start_block:end_block + 1]
+            
+            for block_id in blocks:
+                if block_id in self.block_pool.blocks:
+                    block, = (b for b in self.block_pool.pool if b.block_id == block_id)
+                elif self.persistent:
+                    block_file = open(os.path.join("storage", self.path(), str(block_id)), "rb")
+                    block = Block.deserialize(block_file.read(), self)
+                else:
+                    raise StorageError("non persistent but block not in pool")
+                
+                samples.extend(block.samples)
+        else:
+            for block_id in self.block_pool.blocks:
+                block, = (b for b in self.block_pool.pool if b.block_id == block_id)                
+                samples.extend(block.samples)
         
         return samples
     
@@ -58,7 +79,7 @@ class Session:
         session_pb.ParseFromString(serialized)
         #text_format.Merge(serialized, session_pb)
         
-        session = Session(UUID(bytes=session_pb.session_id))
+        session = Session(UUID(bytes=session_pb.session_id), persistent=True)
         session.blocks = map(lambda x: UUID(bytes=x), session_pb.blocks)
         
         return session
@@ -103,16 +124,13 @@ class Block:
         
         assert(stream.session_id == session.sid.bytes)
         
-        b = Block(0)
+        b = Block()
         b.session = session
         b.timestamp = stream.timestamp
         b.channel = stream.channel
         b.samples = stream.sample
         
         return b
-        
-class BlockPoolError(Exception):
-    pass
 
 class BlockPool:
     def __init__(self, machine_id, file_root, pool_size=100):
@@ -185,13 +203,14 @@ class StorageProtocol(ProtobufProtocol):
         self._new_block()
 
     def stop_session(self):
-        stream_file = open(os.path.join(self.block_pool.file_root, self.session.path(), "index"), "wb")
-        stream_file.write(self.session.serialize())
-        stream_file.close()
+        if self.session.persistent:
+            stream_file = open(os.path.join(self.block_pool.file_root, self.session.path(), "index"), "wb")
+            stream_file.write(self.session.serialize())
+            stream_file.close()
         
-        self.session = Session(UUID(int=0))
-        self.persistent_session = False
-        self._new_block()
+        plot_samples(self.session.query())
+        
+        self.start_session(Session(UUID(int=0)))
 
     def _new_block(self):
         if self._current_block:
