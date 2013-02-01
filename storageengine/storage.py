@@ -1,27 +1,28 @@
 from Queue import Queue
+from google.protobuf import text_format
 from net import ProtobufProtocol
 from protobuf import samples_pb2
 from twisted.internet import reactor
 from twisted.internet.error import ConnectionDone
 from twisted.internet.protocol import ReconnectingClientFactory
 from uuid import UUID, uuid1
+import math
 import os
 import struct
 import uuid
 
-from google.protobuf import text_format
-import math
 
 class Session:
     def __init__(self, sid, persistent=False):
         self.sid = sid
+        self.persistent = persistent
+        
         self.sample_count = 0
         self.machine_id = [0, 0, 0, 0, 0, 0]
-        self.block_count = 0
-        self.block_pool_size = 0
+        
+        self.block_pool = None
         self.blocks = []
         self.block_size = Block.size
-        self.persistent = persistent
     
     def path(self):
         return str(self.sid)
@@ -48,14 +49,14 @@ class Session:
         session = samples_pb2.session()
         session.session_id = self.sid.bytes
         session.blocks.extend(map(lambda x: x.bytes, self.blocks))
-        #return session.SerializeToString()
-        return text_format.MessageToString(session)
+        return session.SerializeToString()
+        #return text_format.MessageToString(session)
     
     @staticmethod
     def deserialise(serialized):
         session_pb = samples_pb2.session()
-        #session_pb.ParseFromString(serialized)
-        text_format.Merge(serialized, session_pb)
+        session_pb.ParseFromString(serialized)
+        #text_format.Merge(serialized, session_pb)
         
         session = Session(UUID(bytes=session_pb.session_id))
         session.blocks = map(lambda x: UUID(bytes=x), session_pb.blocks)
@@ -65,15 +66,14 @@ class Session:
 class Block:
     size = 10
     
-    def __init__(self, index):
-        self.reset(index)
+    def __init__(self):
+        self.reset()
     
     def full(self):
         return len(self.samples) >= Block.size
     
-    def reset(self, index):
+    def reset(self):
         self.block_id = uuid1()
-        self.block_number = index
         self.timestamp = 0
         self.channel = 0
         self.written = False
@@ -120,7 +120,7 @@ class BlockPool:
         self.pool_size = pool_size
         self.file_root = file_root
         
-        self.pool = [Block(i) for i in range(pool_size)]
+        self.pool = [Block() for i in range(pool_size)] #@UnusedVariable
         self._next_free = 0
         
         self.stop_write = False
@@ -137,7 +137,7 @@ class BlockPool:
         if not next_block.free:
             if next_block.session.persistent and not next_block.written:
                 raise BlockPoolError("Potential data loss - need to overwrite unsaved data")
-            next_block.reset(next_block.block_number + self.pool_size)
+            next_block.reset()
         
         self._next_free += 1
         next_block.free = False
@@ -178,7 +178,7 @@ class StorageProtocol(ProtobufProtocol):
     
     def start_session(self, session):
         self.session = session
-        self.session.block_pool_size = self.block_pool.pool_size
+        self.session.block_pool = self.block_pool
         self._new_block()
 
     def stop_session(self):
@@ -199,7 +199,6 @@ class StorageProtocol(ProtobufProtocol):
         self._current_block.timestamp = self.session.sample_count
         
         self.session.blocks.append(self._current_block.block_id)
-        self.session.block_count += 1
 
     def messageReceived(self, message):
         samples = message.sample_stream.sample
