@@ -10,7 +10,7 @@ message sample_stream
 	optional int32 channel = 1;
 	optional int32 rate = 2;
 	optional int64 timestamp = 3;
-	repeated int32 sample = 4 [packed=true];
+	repeated int32 samples = 4 [packed=true];
 	optional bytes session_id = 5;
 	optional bytes machine_id = 6;
 }

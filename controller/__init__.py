@@ -1,3 +1,4 @@
+from graphdisplay import plot_samples
 from net import ProtobufProtocol
 from protobuf.network_pb2 import network_message, storage_command
 from twisted.internet.protocol import ReconnectingClientFactory, Factory
@@ -40,7 +41,9 @@ class CLIFactory(Factory):
         return CLI(self.control)
 
 class StorageEngineControl(ProtobufProtocol):
-    pass
+    def messageReceived(self, message):
+        if message.sample_stream:
+            plot_samples(message.sample_stream.samples)
 
 class StorageEngineControlFactory(ReconnectingClientFactory):
     def buildProtocol(self, addr):

@@ -1,7 +1,6 @@
 from Queue import Queue
 from google.protobuf import text_format
 from net import ProtobufProtocol
-from graphdisplay import plot_samples
 from protobuf import samples_pb2
 from twisted.internet import reactor
 from twisted.internet.error import ConnectionDone
@@ -111,7 +110,7 @@ class Block:
         #TODO: move machine_id to the session
         #stream.machine_id = str(bytearray(self.machine_id))
         stream.channel = self.channel
-        stream.sample.extend(self.samples)
+        stream.samples.extend(self.samples)
         
         return stream.SerializeToString()
         #return text_format.MessageToString(stream)
@@ -128,7 +127,7 @@ class Block:
         b.session = session
         b.timestamp = stream.timestamp
         b.channel = stream.channel
-        b.samples = stream.sample
+        b.samples = stream.samples
         
         return b
 
@@ -208,8 +207,6 @@ class StorageProtocol(ProtobufProtocol):
             stream_file.write(self.session.serialize())
             stream_file.close()
         
-        plot_samples(self.session.query())
-        
         self.start_session(Session(UUID(int=0)))
 
     def _new_block(self):
@@ -223,7 +220,7 @@ class StorageProtocol(ProtobufProtocol):
         self.session.blocks.append(self._current_block.block_id)
 
     def messageReceived(self, message):
-        samples = message.sample_stream.sample
+        samples = message.sample_stream.samples
         print(samples)
         
         if self.session:
