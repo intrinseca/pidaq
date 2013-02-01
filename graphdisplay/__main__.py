@@ -23,7 +23,7 @@ session_index = open(os.path.join("storage", session_dir, "index"), "rb")
 session = Session.deserialise(session_index.read())
 session_index.close()
 
-samples = session.query()
+samples = session.query(start=25, end=125)
 
 pylab.plot(samples)
 pylab.grid()

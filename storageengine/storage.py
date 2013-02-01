@@ -10,6 +10,7 @@ import struct
 import uuid
 
 from google.protobuf import text_format
+import math
 
 class Session:
     def __init__(self, sid, persistent=False):
@@ -25,9 +26,18 @@ class Session:
     def path(self):
         return str(self.sid)
     
-    def query(self):
+    def query(self, start=0, end=None):
         samples = []
-        for block_id in self.blocks:
+        
+        start_block = int(math.floor(start / Block.size))
+        
+        if not end:
+            blocks = self.blocks[start_block:]
+        else:
+            end_block = int(math.ceil(end / Block.size))
+            blocks = self.blocks[start_block:end_block + 1]
+        
+        for block_id in blocks:
             block_file = open(os.path.join("storage", self.path(), str(block_id)), "rb")
             block = Block.deserialize(block_file.read(), self)
             samples.extend(block.samples)
