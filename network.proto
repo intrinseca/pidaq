@@ -11,4 +11,5 @@ message storage_command {
 	optional bool start_session = 1;
 	optional bool stop_session = 2;
 	optional bytes session_id = 3;
+	optional bool show_data = 4;
 }

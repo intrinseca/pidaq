@@ -24,6 +24,11 @@ class CLI(basic.LineReceiver):
             command.storage_command.stop_session = True
             self.control.sendCommand(command)   
             self.transport.write("Session ended\r\n")         
+        elif line == "show":
+            command = network_message()
+            command.storage_command.show_data = True
+            self.control.sendCommand(command)   
+            self.transport.write("Showing data\r\n")         
         
         self.transport.write('>>> ')
 
