@@ -1,5 +1,4 @@
 from Queue import Queue
-from google.protobuf import text_format
 from net import ProtobufProtocol
 from protobuf import samples_pb2
 from twisted.internet import reactor
@@ -10,14 +9,17 @@ import os
 import struct
 import uuid
 
+from google.protobuf import text_format
+
 class Session:
-    def __init__(self, sid, persistent):
+    def __init__(self, sid, persistent=False):
         self.sid = sid
         self.sample_count = 0
         self.machine_id = [0, 0, 0, 0, 0, 0]
         self.block_count = 0
         self.block_pool_size = 0
         self.blocks = []
+        self.block_size = Block.size
         self.persistent = persistent
     
     def path(self):
@@ -43,6 +45,30 @@ class Block:
     
     def path(self):
         return os.path.join(self.session.path(), str(self.block_id))
+    
+    def serialize(self):
+        stream = samples_pb2.sample_stream()
+        stream.timestamp = self.timestamp
+        stream.session_id = self.session.sid.bytes
+        #TODO: move machine_id to the session
+        #stream.machine_id = str(bytearray(self.machine_id))
+        stream.channel = self.channel
+        stream.sample.extend(self.samples)
+        
+        return stream.SerializeToString()
+        #return text_format.MessageToString(stream)
+    
+    def deserialize(self, serialized, session):
+        stream = samples_pb2.sample_stream()
+        stream.ParseFromString(serialized)
+        #text_format.Merge(serialized, stream)
+        
+        assert(stream.session_id == session.sid.bytes)
+        
+        self.session = session
+        self.timestamp = stream.timestamp
+        self.channel = stream.channel
+        self.samples = stream.sample
         
 class BlockPoolError(Exception):
     pass
@@ -94,16 +120,8 @@ class BlockPool:
                 if not os.path.isdir(path):
                     os.mkdir(path)
                 
-                stream = samples_pb2.sample_stream()
-                stream.timestamp = block.timestamp
-                stream.session_id = block.session.sid.bytes
-                stream.machine_id = str(bytearray(self.machine_id))
-                stream.channel = block.channel
-                stream.sample.extend(block.samples)
-                
                 stream_file = open(os.path.join(self.file_root, block.path()), "w")
-                stream_file.write(stream.SerializeToString())
-                # text_format.PrintMessage(stream, stream_file)
+                stream_file.write(block.serialize())
                 stream_file.close()
                 
                 block.written = True

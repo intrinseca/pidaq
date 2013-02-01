@@ -14,3 +14,9 @@ message sample_stream
 	optional bytes session_id = 5;
 	optional bytes machine_id = 6;
 }
+
+message session
+{
+	optional bytes session_id = 1;
+	repeated bytes blocks = 2;
+}
