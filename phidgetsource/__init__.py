@@ -1,16 +1,16 @@
+from Phidgets import PhidgetException
+from Phidgets.Devices.InterfaceKit import InterfaceKit
+from Queue import Queue, Empty
+from net import SampleStreamProtocol, SampleStreamProtocolFactory
 from protobuf import samples_pb2, network_pb2
 from twisted.internet import interfaces, reactor
 from twisted.internet.endpoints import TCP4ClientEndpoint
-from net import SampleStreamProtocol, SampleStreamProtocolFactory
+from twisted.internet.error import ConnectionDone
+from twisted.internet.protocol import Factory
+from twisted.internet.task import LoopingCall
 from twisted.python import log
 from zope.interface import implements
-from Phidgets.Devices.InterfaceKit import InterfaceKit
-from Phidgets import PhidgetException
-from twisted.internet.task import LoopingCall
 import time
-from twisted.internet.protocol import Factory
-from Queue import Queue, Empty
-from twisted.internet.error import ConnectionDone
 
 class PhidgetSourceProtocol(SampleStreamProtocol):
     implements(interfaces.IPushProducer)
@@ -71,7 +71,7 @@ class PhidgetSourceProtocol(SampleStreamProtocol):
             while not self._paused:
                 try:
                     sample = self._samples.get_nowait()
-                    message.sample_stream.sample.append(sample)
+                    message.sample_stream.samples.append(sample)
                 except Empty:
                     break
             

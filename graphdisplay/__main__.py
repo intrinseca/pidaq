@@ -1,11 +1,7 @@
-from protobuf import samples_pb2
-from protobuf.samples_pb2 import sample_stream
-
-from storageengine.storage import Session, Block
+from storageengine.storage import Session
+from graphdisplay import plot_samples
 
 import os
-import pylab
-from uuid import UUID
 
 #get session list
 sessions = os.listdir("storage")
@@ -23,8 +19,6 @@ session_index = open(os.path.join("storage", session_dir, "index"), "rb")
 session = Session.deserialise(session_index.read())
 session_index.close()
 
-samples = session.query()
+samples = session.query(start=25, end=125)
 
-pylab.plot(samples)
-pylab.grid()
-pylab.show()
+plot_samples(samples)

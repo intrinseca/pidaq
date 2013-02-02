@@ -1,9 +1,8 @@
+from protobuf import network_pb2, samples_pb2
 from twisted.internet import protocol, reactor
+from twisted.internet.error import ConnectionDone
 from twisted.internet.protocol import Factory
 from twisted.protocols.basic import Int32StringReceiver
-from twisted.internet.error import ConnectionDone
-
-from protobuf import network_pb2, samples_pb2
 
 class ProtobufProtocol(Int32StringReceiver):
     def sendMessage(self, message):

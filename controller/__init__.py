@@ -1,3 +1,4 @@
+from graphdisplay import plot_samples
 from net import ProtobufProtocol
 from protobuf.network_pb2 import network_message, storage_command
 from twisted.internet.protocol import ReconnectingClientFactory, Factory
@@ -24,6 +25,11 @@ class CLI(basic.LineReceiver):
             command.storage_command.stop_session = True
             self.control.sendCommand(command)   
             self.transport.write("Session ended\r\n")         
+        elif line == "show":
+            command = network_message()
+            command.storage_command.show_data = True
+            self.control.sendCommand(command)   
+            self.transport.write("Showing data\r\n")         
         
         self.transport.write('>>> ')
 
@@ -35,7 +41,9 @@ class CLIFactory(Factory):
         return CLI(self.control)
 
 class StorageEngineControl(ProtobufProtocol):
-    pass
+    def messageReceived(self, message):
+        if message.sample_stream:
+            plot_samples(message.sample_stream.samples)
 
 class StorageEngineControlFactory(ReconnectingClientFactory):
     def buildProtocol(self, addr):

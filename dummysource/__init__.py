@@ -61,7 +61,7 @@ class DummySourceProtocol(SampleStreamProtocol):
             while not self._paused:
                 try:
                     sample = self._samples.get_nowait()
-                    message.sample_stream.sample.append(sample)
+                    message.sample_stream.samples.append(sample)
                 except Empty:
                     break
             
