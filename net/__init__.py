@@ -3,6 +3,13 @@ from twisted.internet import protocol, reactor
 from twisted.internet.error import ConnectionDone
 from twisted.internet.protocol import Factory
 from twisted.protocols.basic import Int32StringReceiver
+import struct
+import uuid
+
+def machine_id():
+    # uuid.getnode will usually return the system MAC address as a 48 bit int
+    # struct.pack for a long long (Q) gives eight bytes, so we slice off the first six
+    return struct.pack("Q", uuid.getnode())[0:6]
 
 class ProtobufProtocol(Int32StringReceiver):
     def sendMessage(self, message):

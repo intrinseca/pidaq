@@ -1,6 +1,6 @@
 from Queue import Queue
 from google.protobuf import text_format
-from net import ProtobufProtocol
+from net import ProtobufProtocol, machine_id
 from protobuf import samples_pb2
 from twisted.internet import reactor
 from twisted.internet.error import ConnectionDone
@@ -24,7 +24,7 @@ class Session:
         self.running = False
         
         self.sample_count = 0
-        self.machine_id = [0, 0, 0, 0, 0, 0]
+        self.machine_id = machine_id()
             
         self.blocks = []
         self.block_size = Block.size
@@ -50,6 +50,7 @@ class Session:
                 
         self._current_block = self.block_pool.new_block()
         self._current_block.session_id = self.sid
+        self._current_block.machine_id = self.machine_id
         self._current_block.timestamp = self.sample_count
         self._current_block.persist = self.persistent
         
@@ -93,13 +94,13 @@ class Session:
         session.session_id = self.sid.bytes
         session.blocks.extend(map(lambda x: x.bytes, self.blocks))
         return session.SerializeToString()
-        #return text_format.MessageToString(session)
+        # return text_format.MessageToString(session)
     
     @staticmethod
     def deserialise(serialized):
         session_pb = samples_pb2.session()
         session_pb.ParseFromString(serialized)
-        #text_format.Merge(serialized, session_pb)
+        # text_format.Merge(serialized, session_pb)
         
         session = Session(UUID(bytes=session_pb.session_id), persistent=True)
         session.blocks = map(lambda x: UUID(bytes=x), session_pb.blocks)
@@ -119,15 +120,16 @@ class Block:
     def reset(self):
         self.block_id = uuid1()
         self.session_id = UUID(int=0)
+        self.machine_id = [0, 0, 0, 0, 0, 0]
         self.timestamp = 0
         self.channel = 0
-        #TODO: Memory Fail
+        # TODO: Memory Fail
         self.samples = []
         
-        #Block States:
-        #Saved/Not Saved - written
-        #Needs Saving/Doesn't Need Saving - persist
-        #Under Pool Control/Not Under Pool Control - locked
+        # Block States:
+        # Saved/Not Saved - written
+        # Needs Saving/Doesn't Need Saving - persist
+        # Under Pool Control/Not Under Pool Control - locked
         
         self.written = False
         self.persist = False
@@ -137,19 +139,18 @@ class Block:
         stream = samples_pb2.sample_stream()
         stream.timestamp = self.timestamp
         stream.session_id = self.session_id.bytes
-        #TODO: move machine_id to the session
-        #stream.machine_id = str(bytearray(self.machine_id))
+        stream.machine_id = str(bytearray(self.machine_id))
         stream.channel = self.channel
         stream.samples.extend(self.samples)
         
         return stream.SerializeToString()
-        #return text_format.MessageToString(stream)
+        # return text_format.MessageToString(stream)
     
     @staticmethod
     def deserialize(serialized):
         stream = samples_pb2.sample_stream()
         stream.ParseFromString(serialized)
-        #text_format.Merge(serialized, stream)
+        # text_format.Merge(serialized, stream)
         
         b = Block()
         b.timestamp = stream.timestamp
@@ -159,8 +160,7 @@ class Block:
         return b
 
 class BlockPool:
-    def __init__(self, machine_id, file_root, pool_size=100):
-        self.machine_id = machine_id
+    def __init__(self, file_root, pool_size=100):
         self.pool_size = pool_size
         self.file_root = file_root
         
@@ -168,7 +168,7 @@ class BlockPool:
             os.mkdir(self.file_root)
         
         self.blocks = []
-        self.pool = [Block() for i in range(pool_size)] #@UnusedVariable
+        self.pool = [Block() for i in range(pool_size)]  # @UnusedVariable
         self._next_block = 0
         
         self.stop_write = False
@@ -240,8 +240,6 @@ class BlockPool:
 class StorageProtocol(ProtobufProtocol):
     def __init__(self, block_pool):
         self.session = None
-        self._current_block = None
-        
         self.block_pool = block_pool
     
     def start_session(self, session):
@@ -251,13 +249,11 @@ class StorageProtocol(ProtobufProtocol):
 
     def stop_session(self):
         self.session.stop()
-        
         self.start_session(Session(UUID(int=0)))
 
     def messageReceived(self, message):
         samples = message.sample_stream.samples
         print(samples)
-        
         self.session.add_samples(samples)
     
     def connectionLost(self, reason=ConnectionDone):
@@ -268,11 +264,7 @@ class StorageFactory(ReconnectingClientFactory):
         self.protocols = []
         
         path = os.path.join(os.getcwd(), "storage")
-        
-        # uuid.getnode will usually return the system mac address as a 48 bit int
-        # struct.pack for a long long (Q) gives eight bytes, so we slice off the first six
-        mac = struct.pack("Q", uuid.getnode())[0:5]
-        self.block_pool = BlockPool(machine_id=mac, file_root=path, pool_size=10)
+        self.block_pool = BlockPool(file_root=path, pool_size=10)
     
     def buildProtocol(self, addr):
         protocol = StorageProtocol(self.block_pool)

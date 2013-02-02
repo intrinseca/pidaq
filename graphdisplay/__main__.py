@@ -1,7 +1,7 @@
-from storageengine.storage import Session
 from graphdisplay import plot_samples
-
+from storageengine.storage import Session
 import os
+
 
 #get session list
 sessions = os.listdir("storage")
