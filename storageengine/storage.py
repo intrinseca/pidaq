@@ -85,6 +85,7 @@ class Block:
     
     def __init__(self):
         self.reset()
+        self.new = True
     
     def full(self):
         return len(self.samples) >= Block.size
@@ -94,10 +95,17 @@ class Block:
         self.session_id = UUID(int=0)
         self.timestamp = 0
         self.channel = 0
-        self.written = False
-        self.free = True
         #TODO: Memory Fail
         self.samples = []
+        
+        #Block States:
+        #Saved/Not Saved - written
+        #Needs Saving/Doesn't Need Saving - persist
+        #Under Pool Control/Not Under Pool Control - locked
+        
+        self.written = False
+        self.persist = False
+        self.locked = False
     
     def serialize(self):
         stream = samples_pb2.sample_stream()
@@ -135,7 +143,7 @@ class BlockPool:
         
         self.blocks = []
         self.pool = [Block() for i in range(pool_size)] #@UnusedVariable
-        self._next_free = 0
+        self._next_block = 0
         
         self.stop_write = False
         self.write_queue = Queue(pool_size)
@@ -151,31 +159,35 @@ class BlockPool:
         else:
             raise BlockPoolError("Requested Block Unavailable")
         
+        block.locked = True
+        
         return block
     
     def new_block(self):
-        if self._next_free >= self.pool_size:
-            self._next_free = 0
+        if self._next_block >= self.pool_size:
+            self._next_block = 0
         
-        next_block = self.pool[self._next_free]
+        block = self.pool[self._next_block]
         
-        if not next_block.free:
-            if not next_block.written:
-                raise BlockPoolError("Potential data loss - need to overwrite unsaved data")
-            self.blocks.remove(next_block.block_id)
-            next_block.reset()
+        if block.persist and not block.written:
+            raise BlockPoolError("Potential data loss - need to overwrite unsaved data")
         
-        self._next_free += 1
-        next_block.free = False
-        self.blocks.append(next_block.block_id)
-        return next_block
-    
-    def release(self, block, persist=False):
-        if persist:
-            self.write_queue.put(block)
+        if block.new:
+            block.new = False
         else:
-            #TODO: Wrong semantics now
-            block.written = True
+            self.blocks.remove(block.block_id)
+            block.reset()
+        
+        self._next_block += 1
+        block.locked = True
+        self.blocks.append(block.block_id)
+        return block
+    
+    def release(self, block):
+        if block.persist:
+            self.write_queue.put(block)
+        
+        block.locked = False
     
     def stop_workers(self):
         self.write_queue.join()
@@ -217,11 +229,12 @@ class StorageProtocol(ProtobufProtocol):
 
     def _new_block(self):
         if self._current_block:
-            self.block_pool.release(self._current_block, self.session.persistent)
+            self.block_pool.release(self._current_block)
                 
         self._current_block = self.block_pool.new_block()
         self._current_block.session_id = self.session.sid
         self._current_block.timestamp = self.session.sample_count
+        self._current_block.persist = self.session.persistent
         
         self.session.blocks.append(self._current_block.block_id)
 
