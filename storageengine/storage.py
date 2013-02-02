@@ -11,7 +11,6 @@ import os
 import struct
 import uuid
 
-
 class BlockPoolError(Exception):
     pass
 
@@ -19,17 +18,13 @@ class StorageError(Exception):
     pass
 
 class Session:
-    def __init__(self, sid, persistent=False, block_pool=None):
+    def __init__(self, sid, persistent=False):
         self.sid = sid
         self.persistent = persistent
+        self.live = True
         
         self.sample_count = 0
         self.machine_id = [0, 0, 0, 0, 0, 0]
-        
-        if block_pool is not None:
-            self.block_pool = block_pool
-        else:
-            self.block_pool = BlockPool(self.machine_id, "storage")
             
         self.blocks = []
         self.block_size = Block.size
@@ -44,20 +39,16 @@ class Session:
         if end:
             end_block = int(math.ceil(end / Block.size))
         
-        if self.persistent:
-            if not end:
-                blocks = self.blocks[start_block:]
-            else:
-                end_block = int(math.ceil(end / Block.size))
-                blocks = self.blocks[start_block:end_block + 1]
-            
-            for block_id in blocks:
-                block = self.block_pool.get(block_id, not self.persistent)
-                
-                samples.extend(block.samples)
+        if not end:
+            blocks = self.blocks[start_block:]
         else:
-            for block_id in self.block_pool.blocks:
-                block, = (b for b in self.block_pool.pool if b.block_id == block_id)                
+            end_block = int(math.ceil(end / Block.size))
+            blocks = self.blocks[start_block:end_block + 1]
+        
+        for block_id in blocks:
+            block = self.block_pool.get(block_id, mem_only=not self.persistent)
+            
+            if block is not None:
                 samples.extend(block.samples)
         
         return samples
@@ -154,10 +145,13 @@ class BlockPool:
         if block_id in self.blocks:
             block, = (b for b in self.pool if b.block_id == block_id)
         elif not mem_only:
-            block_file = open(os.path.join(self.file_root, str(block_id)), "rb")
-            block = Block.deserialize(block_file.read())
+            try:
+                block_file = open(os.path.join(self.file_root, str(block_id)), "rb")
+                block = Block.deserialize(block_file.read())
+            except IOError:
+                raise BlockPoolError("Block not Found in Store")
         else:
-            raise BlockPoolError("Requested Block Unavailable")
+            return None
         
         block.locked = True
         
@@ -217,6 +211,7 @@ class StorageProtocol(ProtobufProtocol):
     
     def start_session(self, session):
         self.session = session
+        session.block_pool = self.block_pool
         self._new_block()
 
     def stop_session(self):
@@ -225,7 +220,7 @@ class StorageProtocol(ProtobufProtocol):
             stream_file.write(self.session.serialize())
             stream_file.close()
         
-        self.start_session(Session(UUID(int=0), block_pool=self.block_pool))
+        self.start_session(Session(UUID(int=0)))
 
     def _new_block(self):
         if self._current_block:
@@ -279,7 +274,7 @@ class StorageFactory(ReconnectingClientFactory):
     
     def start_session(self, sid):
         for p in self.protocols:
-            p.start_session(Session(sid, persistent=True, block_pool=self.block_pool))
+            p.start_session(Session(sid, persistent=True))
             
     def stop_session(self):
         for p in self.protocols:
