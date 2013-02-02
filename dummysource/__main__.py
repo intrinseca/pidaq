@@ -1,4 +1,5 @@
-from dummysource import *
+from dummysource import DummySourceProtocolFactory
+from twisted.internet import reactor
 
 if __name__ == '__main__':
     print("Starting DummySource")

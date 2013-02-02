@@ -1,7 +1,7 @@
-from twisted.internet.protocol import Factory
 from net import ProtobufProtocol
-from uuid import UUID
 from protobuf import network_pb2
+from twisted.internet.protocol import Factory
+from uuid import UUID
 
 class ControlProtocol(ProtobufProtocol):
     def __init__(self, store):
