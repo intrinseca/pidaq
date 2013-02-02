@@ -41,6 +41,7 @@ class Session:
             stream_file.write(self.serialize())
             stream_file.close()
         
+        self.block_pool.release(self._current_block)
         self.running = False
     
     def _new_block(self):
