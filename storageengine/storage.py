@@ -21,16 +21,50 @@ class Session:
     def __init__(self, sid, persistent=False):
         self.sid = sid
         self.persistent = persistent
-        self.live = True
+        self.running = False
         
         self.sample_count = 0
         self.machine_id = [0, 0, 0, 0, 0, 0]
             
         self.blocks = []
         self.block_size = Block.size
+        self.block_pool = None
+        self._current_block = None
     
-    def path(self):
-        return str(self.sid)
+    def start(self):
+        self.running = True
+        self._new_block()
+
+    def stop(self):
+        if self.persistent:
+            stream_file = open(os.path.join(self.block_pool.file_root, "index-%s" % str(self.sid)), "wb")
+            stream_file.write(self.serialize())
+            stream_file.close()
+        
+        self.running = False
+    
+    def _new_block(self):
+        if self._current_block:
+            self.block_pool.release(self._current_block)
+                
+        self._current_block = self.block_pool.new_block()
+        self._current_block.session_id = self.sid
+        self._current_block.timestamp = self.sample_count
+        self._current_block.persist = self.persistent
+        
+        self.blocks.append(self._current_block.block_id)
+    
+    def add_samples(self, samples):
+        assert(self.running == True)
+        
+        i = 0
+        while i < len(samples):
+            if self._current_block.full():
+                self.sample_count += len(self._current_block.samples)
+                self._new_block()
+            
+            self._current_block.samples.append(samples[i])
+            i += 1
     
     def query(self, start=0, end=None):
         samples = []
@@ -211,41 +245,19 @@ class StorageProtocol(ProtobufProtocol):
     
     def start_session(self, session):
         self.session = session
-        session.block_pool = self.block_pool
-        self._new_block()
+        self.session.block_pool = self.block_pool
+        self.session.start()
 
     def stop_session(self):
-        if self.session.persistent:
-            stream_file = open(os.path.join(self.block_pool.file_root, "index-%s" % str(self.session.sid)), "wb")
-            stream_file.write(self.session.serialize())
-            stream_file.close()
+        self.session.stop()
         
         self.start_session(Session(UUID(int=0)))
-
-    def _new_block(self):
-        if self._current_block:
-            self.block_pool.release(self._current_block)
-                
-        self._current_block = self.block_pool.new_block()
-        self._current_block.session_id = self.session.sid
-        self._current_block.timestamp = self.session.sample_count
-        self._current_block.persist = self.session.persistent
-        
-        self.session.blocks.append(self._current_block.block_id)
 
     def messageReceived(self, message):
         samples = message.sample_stream.samples
         print(samples)
         
-        if self.session:
-            i = 0
-            while i < len(samples):
-                if self._current_block.full():
-                    self.session.sample_count += len(self._current_block.samples)
-                    self._new_block()
-                
-                self._current_block.samples.append(samples[i])
-                i += 1
+        self.session.add_samples(samples)
     
     def connectionLost(self, reason=ConnectionDone):
         pass
