@@ -19,14 +19,18 @@ class StorageError(Exception):
     pass
 
 class Session:
-    def __init__(self, sid, persistent=False):
+    def __init__(self, sid, persistent=False, block_pool=None):
         self.sid = sid
         self.persistent = persistent
         
         self.sample_count = 0
         self.machine_id = [0, 0, 0, 0, 0, 0]
         
-        self.block_pool = None
+        if block_pool is not None:
+            self.block_pool = block_pool
+        else:
+            self.block_pool = BlockPool(self.machine_id, "storage")
+            
         self.blocks = []
         self.block_size = Block.size
     
@@ -41,7 +45,6 @@ class Session:
             end_block = int(math.ceil(end / Block.size))
         
         if self.persistent:
-            
             if not end:
                 blocks = self.blocks[start_block:]
             else:
@@ -49,13 +52,7 @@ class Session:
                 blocks = self.blocks[start_block:end_block + 1]
             
             for block_id in blocks:
-                if block_id in self.block_pool.blocks:
-                    block, = (b for b in self.block_pool.pool if b.block_id == block_id)
-                elif self.persistent:
-                    block_file = open(os.path.join("storage", self.path(), str(block_id)), "rb")
-                    block = Block.deserialize(block_file.read(), self)
-                else:
-                    raise StorageError("non persistent but block not in pool")
+                block = self.block_pool.get(block_id, not self.persistent)
                 
                 samples.extend(block.samples)
         else:
@@ -94,19 +91,18 @@ class Block:
     
     def reset(self):
         self.block_id = uuid1()
+        self.session_id = UUID(int=0)
         self.timestamp = 0
         self.channel = 0
         self.written = False
         self.free = True
+        #TODO: Memory Fail
         self.samples = []
-    
-    def path(self):
-        return os.path.join(self.session.path(), str(self.block_id))
     
     def serialize(self):
         stream = samples_pb2.sample_stream()
         stream.timestamp = self.timestamp
-        stream.session_id = self.session.sid.bytes
+        stream.session_id = self.session_id.bytes
         #TODO: move machine_id to the session
         #stream.machine_id = str(bytearray(self.machine_id))
         stream.channel = self.channel
@@ -116,15 +112,12 @@ class Block:
         #return text_format.MessageToString(stream)
     
     @staticmethod
-    def deserialize(serialized, session):
+    def deserialize(serialized):
         stream = samples_pb2.sample_stream()
         stream.ParseFromString(serialized)
         #text_format.Merge(serialized, stream)
         
-        assert(stream.session_id == session.sid.bytes)
-        
         b = Block()
-        b.session = session
         b.timestamp = stream.timestamp
         b.channel = stream.channel
         b.samples = stream.samples
@@ -137,6 +130,9 @@ class BlockPool:
         self.pool_size = pool_size
         self.file_root = file_root
         
+        if not os.path.isdir(self.file_root):
+            os.mkdir(self.file_root)
+        
         self.blocks = []
         self.pool = [Block() for i in range(pool_size)] #@UnusedVariable
         self._next_free = 0
@@ -146,14 +142,25 @@ class BlockPool:
         
         reactor.callInThread(self._process_write_queue)
     
-    def get_free(self):
+    def get(self, block_id, mem_only=True):
+        if block_id in self.blocks:
+            block, = (b for b in self.pool if b.block_id == block_id)
+        elif not mem_only:
+            block_file = open(os.path.join(self.file_root, str(block_id)), "rb")
+            block = Block.deserialize(block_file.read())
+        else:
+            raise BlockPoolError("Requested Block Unavailable")
+        
+        return block
+    
+    def new_block(self):
         if self._next_free >= self.pool_size:
             self._next_free = 0
         
         next_block = self.pool[self._next_free]
         
         if not next_block.free:
-            if next_block.session.persistent and not next_block.written:
+            if not next_block.written:
                 raise BlockPoolError("Potential data loss - need to overwrite unsaved data")
             self.blocks.remove(next_block.block_id)
             next_block.reset()
@@ -163,8 +170,12 @@ class BlockPool:
         self.blocks.append(next_block.block_id)
         return next_block
     
-    def write(self, block):
-        self.write_queue.put(block)
+    def release(self, block, persist=False):
+        if persist:
+            self.write_queue.put(block)
+        else:
+            #TODO: Wrong semantics now
+            block.written = True
     
     def stop_workers(self):
         self.write_queue.join()
@@ -175,17 +186,13 @@ class BlockPool:
             block = self.write_queue.get()
             # print("Block %d in write queue, persist: %r" % (block.block_number, block.persist))
             
-            if block.session.persistent:
-                # print("Writing block %d, sample %d" % (block.block_number, block.timestamp))
-                path = os.path.join(self.file_root, block.session.path())
-                if not os.path.isdir(path):
-                    os.mkdir(path)
-                
-                stream_file = open(os.path.join(self.file_root, block.path()), "wb")
-                stream_file.write(block.serialize())
-                stream_file.close()
-                
-                block.written = True
+            # print("Writing block %d, sample %d" % (block.block_number, block.timestamp))
+            
+            stream_file = open(os.path.join(self.file_root, str(block.block_id)), "wb")
+            stream_file.write(block.serialize())
+            stream_file.close()
+            
+            block.written = True
             
             self.write_queue.task_done()        
 
@@ -198,23 +205,22 @@ class StorageProtocol(ProtobufProtocol):
     
     def start_session(self, session):
         self.session = session
-        self.session.block_pool = self.block_pool
         self._new_block()
 
     def stop_session(self):
         if self.session.persistent:
-            stream_file = open(os.path.join(self.block_pool.file_root, self.session.path(), "index"), "wb")
+            stream_file = open(os.path.join(self.block_pool.file_root, "index-%s" % str(self.session.sid)), "wb")
             stream_file.write(self.session.serialize())
             stream_file.close()
         
-        self.start_session(Session(UUID(int=0)))
+        self.start_session(Session(UUID(int=0), block_pool=self.block_pool))
 
     def _new_block(self):
         if self._current_block:
-            self.block_pool.write(self._current_block)
+            self.block_pool.release(self._current_block, self.session.persistent)
                 
-        self._current_block = self.block_pool.get_free()
-        self._current_block.session = self.session
+        self._current_block = self.block_pool.new_block()
+        self._current_block.session_id = self.session.sid
         self._current_block.timestamp = self.session.sample_count
         
         self.session.blocks.append(self._current_block.block_id)
@@ -260,7 +266,7 @@ class StorageFactory(ReconnectingClientFactory):
     
     def start_session(self, sid):
         for p in self.protocols:
-            p.start_session(Session(sid, persistent=True))
+            p.start_session(Session(sid, persistent=True, block_pool=self.block_pool))
             
     def stop_session(self):
         for p in self.protocols:
