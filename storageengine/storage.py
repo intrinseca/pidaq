@@ -72,8 +72,6 @@ class Session:
         samples = []
         
         start_block = int(math.floor(start / Block.size))
-        if end:
-            end_block = int(math.ceil(end / Block.size))
         
         if not end:
             blocks = self.blocks[start_block:]
@@ -108,7 +106,7 @@ class Session:
         return session
 
 class Block:
-    size = 10
+    size = 17
     
     def __init__(self):
         self.reset()

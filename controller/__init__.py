@@ -1,6 +1,7 @@
 from net import ProtobufProtocol
 from protobuf.network_pb2 import network_message, storage_command
 from twisted.internet.protocol import ReconnectingClientFactory, Factory
+from twisted.internet.task import LoopingCall
 from twisted.protocols import basic
 from uuid import uuid1
 
@@ -43,6 +44,7 @@ class StorageEngineControlFactory(ReconnectingClientFactory):
         self.protocol = StorageEngineControl()
         self.protocol.factory = self
         self.resetDelay()
+        self.start_refresh()
         return self.protocol
     
     def add_handler(self, handler):
@@ -65,6 +67,14 @@ class StorageEngineControlFactory(ReconnectingClientFactory):
         self.protocol.sendMessage(command)
     
     def get_data(self):
-        command = network_message()
-        command.storage_command.show_data = True
-        self.protocol.sendMessage(command)
+        if self.protocol.connected:
+            command = network_message()
+            command.storage_command.show_data = True
+            self.protocol.sendMessage(command)
+    
+    def start_refresh(self):        
+        self._timer = LoopingCall(self.get_data)
+        self._timer.start(0.5)
+    
+    def stop_refresh(self):
+        self._timer.stop()
