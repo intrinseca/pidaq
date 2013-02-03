@@ -17,8 +17,9 @@ class ControlProtocol(ProtobufProtocol):
             self.store.stop_session()
             print("Session Stopped")
         elif command.show_data:
+	    samples = self.store.protocols[0].session.query()
             message = network_pb2.network_message()
-            message.sample_stream.samples.extend(self.store.protocols[0].session.query())
+            message.sample_stream.samples.extend(samples)
             self.sendMessage(message)
         
 class ControlFactory(Factory):

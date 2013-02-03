@@ -37,7 +37,7 @@ class PhidgetSourceProtocol(SampleStreamProtocol):
         self._device.waitForAttach(10000)
         
         self._device.setSensorChangeTrigger(0, 0)
-        self._device.setDataRate(0, 64)
+        self._device.setDataRate(0, 1)
         
         print("Phidget: Connected")
         self.transport.registerProducer(self, True)
