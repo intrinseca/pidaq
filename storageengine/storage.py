@@ -233,52 +233,31 @@ class BlockPool:
             
             self.write_queue.task_done()        
 
-class StorageProtocol(ProtobufProtocol):
-    def __init__(self, block_pool):
-        self.session = None
-        self.block_pool = block_pool
-    
-    def start_session(self, session):
-        self.session = session
-        self.session.block_pool = self.block_pool
-        self.session.start()
-
-    def stop_session(self):
-        self.session.stop()
-        self.start_session(Session(UUID(int=0)))
-
-    def messageReceived(self, message):
-        samples = message.sample_stream.samples
-        #print(samples)
-        self.session.add_samples(samples)
-    
-    def connectionLost(self, reason=ConnectionDone):
-        pass
-
-class StorageFactory(ReconnectingClientFactory):
+class StorageEngine():
     def __init__(self):
-        self.protocols = []
-        
         path = os.path.join(os.getcwd(), "storage")
         self.block_pool = BlockPool(file_root=path, pool_size=10)
+        self.session = None
+        self.store = None
+        self._live_session()
     
-    def buildProtocol(self, addr):
-        protocol = StorageProtocol(self.block_pool)
-        protocol.factory = self
-        self.protocols.append(protocol)
-        protocol.start_session(Session(UUID(int=0), persistent=False))
-        self.resetDelay()
-        return protocol
-    
-    def stopFactory(self):
-        self.block_pool.stop_workers()
-    
-    def start_session(self, sid):
-        for p in self.protocols:
-            p.start_session(Session(sid, persistent=True))
+    def start_session(self, sid, persistent=True):
+        self.session = Session(sid, persistent=persistent)
+        self.session.block_pool = self.block_pool
+        self.session.start()
             
     def stop_session(self):
-        for p in self.protocols:
-            p.stop_session()
-        
+        self.session.stop()
+        self._live_session()
+    
+    def _live_session(self):
+        self.start_session(UUID(int=0), persistent=False)
+    
+    def add_samples(self, samples):
+        if self.session is not None and self.session.running:
+            self.session.add_samples(samples)
+    
+    def set_source(self, store):
+        self.store = store
+        self.store.sink = self.add_samples
         
