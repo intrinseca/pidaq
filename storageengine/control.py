@@ -17,8 +17,14 @@ class ControlProtocol(ProtobufProtocol):
             self.store.stop_session()
             print("Session Stopped")
         elif command.show_data:
-	    samples = self.store.protocols[0].session.query()
+            if command.start_sample:
+                start = command.start_sample
+            else:
+                start = 0
+            
+            (timestamp, samples) = self.store.protocols[0].session.query(start)
             message = network_pb2.network_message()
+            message.sample_stream.timestamp = timestamp
             message.sample_stream.samples.extend(samples)
             self.sendMessage(message)
         

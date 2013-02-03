@@ -36,32 +36,44 @@ class StorageEngineControl(ProtobufProtocol):
     def messageReceived(self, message):
         self.factory.messageReceived(message)
 
-class StorageEngineControlFactory(ReconnectingClientFactory):
+class StorageEngineControlFactory(ReconnectingClientFactory):        
     def __init__(self):
-        self.handlers = []
+        self.uis = []
+        self.window_width = 5000
     
     def buildProtocol(self, addr):
         self.protocol = StorageEngineControl()
         self.protocol.factory = self
         self.resetDelay()
+        self.sample_head = 0
         self.start_refresh()
         return self.protocol
     
-    def add_handler(self, handler):
-        self.handlers.append(handler)
+    def add_ui(self, ui):
+        self.uis.append(ui)
     
     def messageReceived(self, message):
-        for handler in self.handlers:
-            handler(message)
+        if message.sample_stream is not None:            
+            if(len(message.sample_stream.samples) > self.window_width):
+                samples = message.sample_stream.samples[-self.window_width:]
+            else:
+                samples = message.sample_stream.samples
+            
+            self.sample_head = message.sample_stream.timestamp + len(message.sample_stream.samples)
+        
+        for ui in self.uis:
+            ui.show_samples(samples, self.window_width)
     
     def start_session(self):
         sid = uuid1()
+        self.sample_head = 0
         command = network_message()
         command.storage_command.start_session = True
         command.storage_command.session_id = sid.bytes
         self.protocol.sendMessage(command)
     
     def stop_session(self):
+        self.sample_head = 0
         command = network_message()
         command.storage_command.stop_session = True
         self.protocol.sendMessage(command)
@@ -70,11 +82,17 @@ class StorageEngineControlFactory(ReconnectingClientFactory):
         if self.protocol.connected:
             command = network_message()
             command.storage_command.show_data = True
+            
+            start = self.sample_head - self.window_width
+            if start < 0:
+                start = 0
+            
+            command.storage_command.start_sample = start
             self.protocol.sendMessage(command)
     
-    def start_refresh(self):        
+    def start_refresh(self):
         self._timer = LoopingCall(self.get_data)
-        self._timer.start(0.5)
+        self._timer.start(1.0 / 30.0)
     
     def stop_refresh(self):
         self._timer.stop()

@@ -18,7 +18,7 @@ reactor.connectTCP("raspberrypi", 1235, control)
 app = wx.App(False)  # Create a new app, don't redirect stdout/stderr to a window.
 
 frame = ControlWindow(None, control)
-control.add_handler(frame.message_handler)
+control.add_ui(frame)
 frame.Show(True)
 reactor.registerWxApp(app)
 

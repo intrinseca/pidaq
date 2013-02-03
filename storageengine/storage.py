@@ -74,6 +74,7 @@ class Session:
         start_block = int(math.floor(start / Block.size))
         
         if not end:
+            end_block = len(self.blocks) - 1
             blocks = self.blocks[start_block:]
         else:
             end_block = int(math.ceil(end / Block.size))
@@ -85,7 +86,7 @@ class Session:
             if block is not None:
                 samples.extend(block.samples)
         
-        return samples
+        return (start_block * Block.size, samples)
     
     def serialize(self):
         session = samples_pb2.session()

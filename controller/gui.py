@@ -6,7 +6,8 @@ from matplotlib.figure import Figure
 
 class ControlWindow(wx.Frame):
     def __init__(self, parent, control):
-        self.control = control        
+        self.control = control
+        self.line = None
         
         wx.Frame.__init__(self, parent, title="PiDAQ", size=(640, 480))
         
@@ -35,10 +36,23 @@ class ControlWindow(wx.Frame):
     
         panel.SetSizer(top_sizer)
     
-    def message_handler(self, message):
-        plot = self.figure.add_subplot(111)
-        plot.clear()
-        plot.plot(message.sample_stream.samples)
+    def show_samples(self, samples, width):
+        if self.line is None or len(samples) < width:        
+            plot = self.figure.add_subplot(111)
+            plot.clear()
+            plot.set_xlim(-width, 0)
+            plot.set_ylim(0, 1024)
+            plot.yaxis.tick_right()
+            plot.set_yticks(range(0,1025,256))
+            line, = plot.plot(range(-len(samples), 0), samples)
+            
+            if len(samples) == width:
+                self.line = line
+            else:
+                self.line = None    
+        else:
+            self.line.set_ydata(samples)
+
         self.canvas.draw()
     
     def btnStart_Click(self, event=None):
