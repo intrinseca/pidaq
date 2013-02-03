@@ -1,11 +1,11 @@
-#from dummysource import DummySourceProtocolFactory
-from phidgetsource import PhidgetSourceProtocolFactory
+from dummysource import DummySourceProtocolFactory
+#from phidgetsource import PhidgetSourceProtocolFactory
 from storageengine.control import ControlFactory
 from storageengine.storage import StorageFactory
 from twisted.internet import reactor
 
-source = PhidgetSourceProtocolFactory()
-#source = DummySourceProtocolFactory()
+#source = PhidgetSourceProtocolFactory()
+source = DummySourceProtocolFactory()
 store = StorageFactory()
 control = ControlFactory()
 

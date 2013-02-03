@@ -47,7 +47,7 @@ class DummySourceProtocol(SampleStreamProtocol):
     def takeSample(self):
         self._sampleNumber += 1
         
-        self._samples.put(512 + int(math.sin(self._sampleNumber * 0.001) * 512))
+        self._samples.put(512 + int(math.sin(self._sampleNumber * 0.01) * 512))
         
         if not self._paused and self._samples.qsize() >= 10:
             reactor.callFromThread(self.sendSamples)
