@@ -37,7 +37,7 @@ class DummySourceProtocol(SampleStreamProtocol):
         
     def resumeProducing(self):
         self._paused = False
-        self._timer.start(0.01)
+        self._timer.start(0.001)
         
     def stopProducing(self):
         self._paused = True
@@ -47,7 +47,7 @@ class DummySourceProtocol(SampleStreamProtocol):
     def takeSample(self):
         self._sampleNumber += 1
         
-        self._samples.put(int(512 + math.sin(self._sampleNumber * 0.1) * 512))
+        self._samples.put(512 + int(math.sin(self._sampleNumber * 0.001) * 512))
         
         if not self._paused and self._samples.qsize() >= 10:
             reactor.callFromThread(self.sendSamples)
@@ -56,7 +56,7 @@ class DummySourceProtocol(SampleStreamProtocol):
         if not self._paused:
             message = network_pb2.network_message()
             message.sample_stream.channel = 0
-            message.sample_stream.rate = 128
+            message.sample_stream.rate = int(1.0 / self._timer.interval)
                         
             while not self._paused:
                 try:

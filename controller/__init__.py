@@ -39,7 +39,7 @@ class StorageEngineControl(ProtobufProtocol):
 class StorageEngineControlFactory(ReconnectingClientFactory):        
     def __init__(self):
         self.uis = []
-        self.window_width = 500
+        self.window_width = 5000
     
     def buildProtocol(self, addr):
         self.protocol = StorageEngineControl()
@@ -62,7 +62,7 @@ class StorageEngineControlFactory(ReconnectingClientFactory):
             self.sample_head = message.sample_stream.timestamp + len(message.sample_stream.samples)
         
         for ui in self.uis:
-            ui.show_samples(samples)
+            ui.show_samples(samples, self.window_width)
     
     def start_session(self):
         sid = uuid1()
@@ -92,7 +92,7 @@ class StorageEngineControlFactory(ReconnectingClientFactory):
     
     def start_refresh(self):
         self._timer = LoopingCall(self.get_data)
-        self._timer.start(0.5)
+        self._timer.start(1.0 / 30.0)
     
     def stop_refresh(self):
         self._timer.stop()
