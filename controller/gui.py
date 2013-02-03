@@ -6,7 +6,7 @@ from matplotlib.figure import Figure
 
 class ControlWindow(wx.Frame):
     def __init__(self, parent, control):
-        self.control = control        
+        self.control = control
         
         wx.Frame.__init__(self, parent, title="PiDAQ", size=(640, 480))
         
@@ -35,10 +35,14 @@ class ControlWindow(wx.Frame):
     
         panel.SetSizer(top_sizer)
     
-    def message_handler(self, message):
+    def show_samples(self, samples):
         plot = self.figure.add_subplot(111)
         plot.clear()
-        plot.plot(message.sample_stream.samples)
+        plot.set_xlim(-500, 0)
+        plot.set_ylim(0, 1024)
+        plot.yaxis.tick_right()
+        plot.set_yticks(range(0,1025,256))
+        plot.plot(range(-len(samples), 0), samples)
         self.canvas.draw()
     
     def btnStart_Click(self, event=None):
