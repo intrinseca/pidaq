@@ -11,7 +11,7 @@ control = ControlFactory()
 
 control.store = store
 
-#reactor.listenTCP(1234, source)
+reactor.listenTCP(1234, source)
 reactor.listenTCP(1235, control)
 reactor.connectTCP("raspberrypi", 1234, store)
 reactor.run()
