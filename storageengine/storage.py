@@ -225,9 +225,6 @@ class BlockPool:
     def _process_write_queue(self):
         while not self.stop_write:
             block = self.write_queue.get()
-            # print("Block %d in write queue, persist: %r" % (block.block_number, block.persist))
-            
-            # print("Writing block %d, sample %d" % (block.block_number, block.timestamp))
             
             stream_file = open(os.path.join(self.file_root, str(block.block_id)), "wb")
             stream_file.write(block.serialize())

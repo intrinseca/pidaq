@@ -10,9 +10,12 @@ class ControlProtocol(ProtobufProtocol):
     def messageReceived(self, message):
         command = message.storage_command
         if command.start_session:
-            self.store.start_session(UUID(bytes=command.session_id))
+            sid = UUID(bytes=command.session_id)
+            self.store.start_session(sid)
+            print("Session Started: %s" % sid)
         elif command.stop_session:
             self.store.stop_session()
+            print("Session Stopped")
         elif command.show_data:
             message = network_pb2.network_message()
             message.sample_stream.samples.extend(self.store.protocols[0].session.query())

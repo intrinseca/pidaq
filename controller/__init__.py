@@ -1,4 +1,3 @@
-from graphdisplay import plot_samples
 from net import ProtobufProtocol
 from protobuf.network_pb2 import network_message, storage_command
 from twisted.internet.protocol import ReconnectingClientFactory, Factory
@@ -14,21 +13,13 @@ class CLI(basic.LineReceiver):
 
     def lineReceived(self, line):
         if line == "start":
-            sid = uuid1()
-            command = network_message()
-            command.storage_command.start_session = True
-            command.storage_command.session_id = sid.bytes
-            self.control.sendCommand(command)
-            self.transport.write("Started session %s\r\n" % str(sid))
+            self.control.start_session()
+            self.transport.write("Started session\r\n")
         elif line == "stop":
-            command = network_message()
-            command.storage_command.stop_session = True
-            self.control.sendCommand(command)   
+            self.control.stop_session()
             self.transport.write("Session ended\r\n")         
         elif line == "show":
-            command = network_message()
-            command.storage_command.show_data = True
-            self.control.sendCommand(command)   
+            self.control.get_data() 
             self.transport.write("Showing data\r\n")         
         
         self.transport.write('>>> ')
@@ -42,14 +33,38 @@ class CLIFactory(Factory):
 
 class StorageEngineControl(ProtobufProtocol):
     def messageReceived(self, message):
-        if message.sample_stream:
-            plot_samples(message.sample_stream.samples)
+        self.factory.messageReceived(message)
 
 class StorageEngineControlFactory(ReconnectingClientFactory):
+    def __init__(self):
+        self.handlers = []
+    
     def buildProtocol(self, addr):
         self.protocol = StorageEngineControl()
+        self.protocol.factory = self
         self.resetDelay()
         return self.protocol
     
-    def sendCommand(self, message):
-        self.protocol.sendMessage(message)
+    def add_handler(self, handler):
+        self.handlers.append(handler)
+    
+    def messageReceived(self, message):
+        for handler in self.handlers:
+            handler(message)
+    
+    def start_session(self):
+        sid = uuid1()
+        command = network_message()
+        command.storage_command.start_session = True
+        command.storage_command.session_id = sid.bytes
+        self.protocol.sendMessage(command)
+    
+    def stop_session(self):
+        command = network_message()
+        command.storage_command.stop_session = True
+        self.protocol.sendMessage(command)
+    
+    def get_data(self):
+        command = network_message()
+        command.storage_command.show_data = True
+        self.protocol.sendMessage(command)
