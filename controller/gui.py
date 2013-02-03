@@ -3,11 +3,13 @@ matplotlib.use('WXAgg')
 import wx
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg
 from matplotlib.figure import Figure
+from collections import deque
 
 class ControlWindow(wx.Frame):
     def __init__(self, parent, control):
         self.control = control
         self.line = None
+        self.live_buffer = deque(maxlen=5000)
         
         wx.Frame.__init__(self, parent, title="PiDAQ", size=(640, 480))
         
@@ -30,11 +32,15 @@ class ControlWindow(wx.Frame):
         top_sizer.Add(self.canvas, 1, wx.EXPAND | wx.ALL, 3)
         top_sizer.Add(control_sizer)
         
+        self.canvas.Bind(wx.EVT_IDLE, self.update_data)
         btnStart.Bind(wx.EVT_BUTTON, self.btnStart_Click)
         btnStop.Bind(wx.EVT_BUTTON, self.btnStop_Click)
         btnShow.Bind(wx.EVT_BUTTON, self.btnShow_Click)
     
         panel.SetSizer(top_sizer)
+    
+    def update_data(self, event=None):
+        self.show_samples(self.live_buffer, self.live_buffer.maxlen)
     
     def show_samples(self, samples, width):
         if self.line is None or len(samples) < width:        
