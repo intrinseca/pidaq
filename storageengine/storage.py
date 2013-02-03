@@ -106,7 +106,7 @@ class Session:
         return session
 
 class Block:
-    size = 17
+    size = 1000
     
     def __init__(self):
         self.reset()
@@ -248,7 +248,7 @@ class StorageProtocol(ProtobufProtocol):
 
     def messageReceived(self, message):
         samples = message.sample_stream.samples
-        print(samples)
+        #print(samples)
         self.session.add_samples(samples)
     
     def connectionLost(self, reason=ConnectionDone):

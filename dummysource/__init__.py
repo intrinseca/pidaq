@@ -37,7 +37,7 @@ class DummySourceProtocol(SampleStreamProtocol):
         
     def resumeProducing(self):
         self._paused = False
-        self._timer.start(0.128)
+        self._timer.start(0.01)
         
     def stopProducing(self):
         self._paused = True
