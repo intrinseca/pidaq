@@ -5,12 +5,13 @@ from storageengine.storage import StorageFactory
 from twisted.internet import reactor
 
 source = PhidgetSourceProtocolFactory()
+#source = DummySourceProtocolFactory()
 store = StorageFactory()
 control = ControlFactory()
 
 control.store = store
 
-reactor.listenTCP(1234, source)
+#reactor.listenTCP(1234, source)
 reactor.listenTCP(1235, control)
-reactor.connectTCP("localhost", 1234, store)
+reactor.connectTCP("raspberrypi", 1234, store)
 reactor.run()
