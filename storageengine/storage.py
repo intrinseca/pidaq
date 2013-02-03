@@ -3,13 +3,9 @@ from google.protobuf import text_format
 from net import ProtobufProtocol, machine_id
 from protobuf import samples_pb2
 from twisted.internet import reactor
-from twisted.internet.error import ConnectionDone
-from twisted.internet.protocol import ReconnectingClientFactory
 from uuid import UUID, uuid1
 import math
 import os
-import struct
-import uuid
 
 class BlockPoolError(Exception):
     pass
@@ -231,7 +227,7 @@ class BlockPool:
             
             block.written = True
             
-            self.write_queue.task_done()        
+            self.write_queue.task_done()
 
 class StorageEngine():
     def __init__(self):
@@ -239,7 +235,8 @@ class StorageEngine():
         self.block_pool = BlockPool(file_root=path, pool_size=10)
         self.session = None
         self.store = None
-        self._live_session()
+        self.live_stream = None
+        self._make_live_session()
     
     def start_session(self, sid, persistent=True):
         self.session = Session(sid, persistent=persistent)
@@ -248,13 +245,16 @@ class StorageEngine():
             
     def stop_session(self):
         self.session.stop()
-        self._live_session()
+        self._make_live_session()
     
-    def _live_session(self):
+    def _make_live_session(self):
         self.start_session(UUID(int=0), persistent=False)
     
     def add_samples(self, samples):
         if self.session is not None and self.session.running:
+            for s in samples:
+                self.live_stream.send_sample(s)
+            
             self.session.add_samples(samples)
     
     def set_source(self, store):

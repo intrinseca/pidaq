@@ -33,6 +33,11 @@ class CLIFactory(Factory):
         return CLI(self.control)
 
 class StorageEngineControl(ProtobufProtocol):
+    def connectionMade(self):
+        command = network_message()
+        command.storage_command.stream_to = self.transport.getHost().host
+        self.sendMessage(command)
+    
     def messageReceived(self, message):
         self.factory.messageReceived(message)
 
@@ -92,7 +97,7 @@ class StorageEngineControlFactory(ReconnectingClientFactory):
     
     def start_refresh(self):
         self._timer = LoopingCall(self.get_data)
-        self._timer.start(1.0 / 30.0)
+        #self._timer.start(1.0 / 30.0)
     
     def stop_refresh(self):
         self._timer.stop()

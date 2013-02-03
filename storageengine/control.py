@@ -27,6 +27,8 @@ class ControlProtocol(ProtobufProtocol):
             message.sample_stream.timestamp = timestamp
             message.sample_stream.samples.extend(samples)
             self.sendMessage(message)
+        elif command.stream_to:
+            self.store.live_stream.hosts.append(command.stream_to)
         
 class ControlFactory(Factory):
     def buildProtocol(self, addr):
