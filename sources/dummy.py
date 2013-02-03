@@ -1,10 +1,11 @@
 from twisted.internet.task import LoopingCall
 import math
+from sources import Source
 
-class DummySource():
+class SineSource(Source):
     def __init__(self):
+        Source.__init__(self)
         self._sample_number = 0
-        self.sink = None
         self._timer = LoopingCall(self.sample)
         self._timer.start(0.01)
     
