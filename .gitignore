@@ -5,3 +5,4 @@ protobuf/*_pb2.py
 *.prl
 *.pro
 storage/*
+*.profile

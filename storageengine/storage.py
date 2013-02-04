@@ -1,4 +1,4 @@
-from Queue import Queue
+from Queue import Queue, Empty
 from google.protobuf import text_format
 from net import ProtobufProtocol, machine_id
 from protobuf import samples_pb2
@@ -219,15 +219,18 @@ class BlockPool:
     
     def _process_write_queue(self):
         while not self.stop_write:
-            block = self.write_queue.get()
-            
-            stream_file = open(os.path.join(self.file_root, str(block.block_id)), "wb")
-            stream_file.write(block.serialize())
-            stream_file.close()
-            
-            block.written = True
-            
-            self.write_queue.task_done()
+            try:
+                block = self.write_queue.get(timeout=0.5)
+            except Empty:
+                pass
+            else:            
+                stream_file = open(os.path.join(self.file_root, str(block.block_id)), "wb")
+                stream_file.write(block.serialize())
+                stream_file.close()
+                
+                block.written = True
+                
+                self.write_queue.task_done()
 
 class StorageEngine():
     def __init__(self):
@@ -260,4 +263,6 @@ class StorageEngine():
     def set_source(self, store):
         self.store = store
         self.store.sink = self.add_samples
-        
+    
+    def shutdown(self):
+        self.block_pool.stop_workers()
