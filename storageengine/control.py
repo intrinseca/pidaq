@@ -33,3 +33,6 @@ class ControlProtocol(ProtobufProtocol):
 class ControlFactory(Factory):
     def buildProtocol(self, addr):
         return ControlProtocol(self.store)
+    
+    def stopFactory(self):
+        self.store.shutdown()
