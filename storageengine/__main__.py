@@ -1,3 +1,4 @@
+from sources import SPISource
 from sources.dummy import SineSource
 from sources.phidget import InterfaceSource
 from storageengine.control import ControlFactory
@@ -9,7 +10,7 @@ store = StorageEngine()
 control = ControlFactory()
 live_stream = LiveStream()
 
-store.set_source(SineSource())
+store.set_source(SPISource())
 store.live_stream = live_stream
 control.store = store
 
