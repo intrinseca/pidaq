@@ -1,16 +1,27 @@
-from sources import SPISource
-from sources.dummy import SineSource
-from sources.phidget import InterfaceSource
+from net import LiveStream
 from storageengine.control import ControlFactory
 from storageengine.storage import StorageEngine
 from twisted.internet import reactor
-from net import LiveStream
+import sys
 
 store = StorageEngine()
 control = ControlFactory()
 live_stream = LiveStream()
 
-store.set_source(SPISource())
+if sys.argv[1] == 'spi':
+    from sources.spi import SPISource
+    source = SPISource()
+elif sys.argv[1] == 'phidget':
+    from sources.phidget import InterfaceSource
+    source = InterfaceSource()
+elif sys.argv[1] == 'sine':
+    from sources.dummy import SineSource
+    source = SineSource()
+else:
+    print("Invalid Source")
+    exit()
+
+store.set_source(source)
 store.live_stream = live_stream
 control.store = store
 

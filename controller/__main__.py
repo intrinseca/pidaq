@@ -1,6 +1,7 @@
 from twisted.internet import wxreactor
 wxreactor.install()
 
+import sys
 from net import LiveStream
 from controller import StorageEngineControlFactory, CLI, CLIFactory
 from controller.gui import ControlWindow
@@ -15,7 +16,7 @@ live_stream = LiveStream()
 #reactor.listenTCP(1236, CLIFactory(control))
 
 reactor.listenUDP(1234, live_stream)
-reactor.connectTCP("localhost", 1235, control)
+reactor.connectTCP(sys.argv[1], 1235, control)
 
 app = wx.App(False)
 frame = ControlWindow(None, control)
