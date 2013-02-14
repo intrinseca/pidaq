@@ -1,5 +1,4 @@
 from sources import Source
-from spi import spi_transfer, SPIDev
 from twisted.internet import reactor
 
 class SPISource(Source):
