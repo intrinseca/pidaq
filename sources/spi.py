@@ -1,11 +1,12 @@
 from sources import Source
 from twisted.internet import reactor
+from spipy import SPI
 
 class SPISource(Source):
     def __init__(self):
         print("SPI Source")
         Source.__init__(self)
-        self._spi = open('/dev/spidev0.0', 'rw+')
+        self._spi = SPI(0, 0)
         #self._timer = LoopingCall(self.sample)
         #print("Starting Sample Timer")
         #self._timer.start(1)
@@ -13,9 +14,9 @@ class SPISource(Source):
         
     def sample(self):
         while True:
-            len = ord(self._spi.read(1))
+            len = ord(self._spi.transfer("", 1))
             if len > 0:
-                data = map(ord, self._spi.read(len))
+                data = map(ord, self._spi.transfer("", len))
                 if self.sink is not None:
                     self.sink(data)
                 print("%d: %r" % (len, data))
