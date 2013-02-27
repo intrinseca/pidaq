@@ -14,22 +14,31 @@ def machine_id():
 
 class LiveStream(DatagramProtocol):
     def startProtocol(self):
-        self.buffer = []
+        self.receive_buffer = bytearray()
         self.hosts = []
         self.target = None
     
-    def send_sample(self, sample):
+    def send_samples(self, samples):
+        buffer = ""
+        
+        for s in samples:
+            buffer += struct.pack("<H", s)
+        
         for host in self.hosts:
-            self.transport.write(struct.pack("<H", sample), (host, 1234))
+            self.transport.write(buffer, (host, 1234))
     
     def datagramReceived(self, data, (host, port)):
-        self.buffer.extend(data)
+        self.receive_buffer.extend(data)
+        count = 0
         
-        while len(self.buffer) >= 2:
-            sample, = struct.unpack("<H", data)
+        while len(self.receive_buffer) >= 2:
+            sample, = struct.unpack_from("<H", buffer(self.receive_buffer))
             if self.target is not None:
                 self.target.append(sample)
-            del self.buffer[0:2]
+            del self.receive_buffer[0:2]
+            count += 1
+        
+        #print count
 
 class ProtobufProtocol(Int32StringReceiver):
     def sendMessage(self, message):

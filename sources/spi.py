@@ -10,13 +10,22 @@ class SPISource(Source):
         #self._timer = LoopingCall(self.sample)
         #print("Starting Sample Timer")
         #self._timer.start(1)
+        self.stopping = False
         reactor.callInThread(self.sample)
         
     def sample(self):
-        while True:
-            len = ord(self._spi.transfer("", 1))
-            if len > 0:
-                data = map(ord, self._spi.transfer("", len))
+        skip = 0
+        while not self.stopping:
+            length, = self._spi.transfer([], 1)
+            if length > 0:
+                data = self._spi.transfer([], length)
+                print("{:3}->data ({}): {:3} ({:3}) {:3}".format(skip, length, data[0], data[len(data) - 1] - data[0], data[len(data) - 1]))
                 if self.sink is not None:
                     self.sink(data)
-                print("%d: %r" % (len, data))
+                    
+                skip = 0
+                
+            skip += 1
+
+    def stop(self):
+        self.stopping = True

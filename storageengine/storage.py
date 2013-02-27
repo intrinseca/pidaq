@@ -103,7 +103,7 @@ class Session:
         return session
 
 class Block:
-    size = 1000
+    size = 100000
     
     def __init__(self):
         self.reset()
@@ -255,8 +255,7 @@ class StorageEngine():
     
     def add_samples(self, samples):
         if self.session is not None and self.session.running:
-            for s in samples:
-                self.live_stream.send_sample(s)
+            self.live_stream.send_samples(samples)
             
             self.session.add_samples(samples)
     
@@ -265,4 +264,5 @@ class StorageEngine():
         self.store.sink = self.add_samples
     
     def shutdown(self):
+        self.store.stop()
         self.block_pool.stop_workers()
