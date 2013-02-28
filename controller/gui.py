@@ -64,12 +64,12 @@ class ControlWindow(wx.Frame):
         
         (x1, data) = self.downsample(self.live_buffer, int(data_width / plot_width))
         
-        x = numpy.array(x1) - data_width
+        x = numpy.array(x1) - len(self.live_buffer)
         x.shape = (len(x), 1)
         y = numpy.resize(data, (len(x), 1))
         z = numpy.append(x, y, axis=1)
         line = PolyLine(z, colour='blue', width=1.5)
-        self.canvas.Draw(PlotGraphics([line]))
+        self.canvas.Draw(PlotGraphics([line]), xAxis=(-self.live_buffer.maxlen, 0), yAxis=(0,1024))
         self.frames += 1
     
     def downsample(self, samples, downsample_factor):
