@@ -10,7 +10,11 @@ class SineSource(Source):
         self._timer.start(0.01)
     
     def sample(self):
-        if self.sink is not None:
-            self.sink([512 + int(math.sin(self._sample_number * 0.001) * 512)])
+        samples = []
         
-        self._sample_number += 1
+        for i in range(0,10):
+            samples.append(512 + int(math.sin(self._sample_number * 0.001) * 512))
+            self._sample_number += 1
+        
+        if self.sink is not None:
+            self.sink(samples)
