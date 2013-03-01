@@ -6,3 +6,4 @@ protobuf/*_pb2.py
 *.pro
 storage/*
 *.profile
+build/
