@@ -148,8 +148,8 @@ int extract_samples(spi_word_t* in, int in_offset, PyObject *list, int list_offs
 //            return -1;
 //        }
         new = PyInt_FromLong(in[i + in_offset]);
-        Py_INCREF(new);
         PyList_Append(list, new);
+        Py_DECREF(new);
         i++;
     }
 
@@ -245,7 +245,6 @@ PiDAQ_get_samples(PiDAQ *self)
         }
     }
 
-    Py_INCREF(rx_list);
     return rx_list;
 }
 
