@@ -10,12 +10,17 @@
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 #define MAXPATH 16
-#define MAX_TRANSFER_LENGTH 256
+#define MAX_TRANSFER_LENGTH 1024
 
-#define DEBUG_MODE
+#define SPI_SPEED 1000000
+#define SPI_BITS_PER_WORD 8
+
+typedef unsigned char spi_word_t;
+
+//#define DEBUG_MODE
 
 #ifdef DEBUG_MODE
-#define DEBUG(fmt, args...) printf("%s:%s:%d: "fmt, __FILE__, __FUNCTION__, __LINE__, args)
+#define DEBUG(fmt, args...) printf(fmt, args)
 #else
 #define DEBUG(fmt, args...)
 #endif
@@ -126,9 +131,128 @@ PiDAQ_close(PiDAQ *self)
     Py_RETURN_NONE;
 }
 
+PyDoc_STRVAR(PiDAQ_get_samples_doc,
+    "get_samples() -> [samples]\n\n"
+    "Get a block of samples from the device.\n");
+
+int extract_samples(spi_word_t* in, int in_offset, PyObject *list, int list_offset, int length)
+{
+    int i = 0;
+    PyObject *new;
+
+    while(i < length)
+    {
+//        if(PyList_SetItem(list, i + list_offset, PyInt_FromLong(in[i + in_offset])) != 0)
+//        {
+//            PyErr_SetString(PyExc_RuntimeError, "Error putting received data item in list");
+//            return -1;
+//        }
+        new = PyInt_FromLong(in[i + in_offset]);
+        Py_INCREF(new);
+        PyList_Append(list, new);
+        i++;
+    }
+
+    return 0;
+}
+
+static PyObject *
+PiDAQ_get_samples(PiDAQ *self)
+{
+    int i;
+    int rx_list_offset;
+    int rx_length;
+    int rx_remainder;
+
+    struct spi_ioc_transfer transfer;
+    spi_word_t tx_buf[MAX_TRANSFER_LENGTH];
+    spi_word_t rx_buf[MAX_TRANSFER_LENGTH];
+
+    memset(tx_buf, 0, MAX_TRANSFER_LENGTH);
+    memset(&transfer, 0, sizeof transfer);
+
+    rx_length = 0;
+
+    transfer.tx_buf = (unsigned long) tx_buf,
+    transfer.rx_buf = (unsigned long) rx_buf;
+    transfer.len = MAX_TRANSFER_LENGTH;
+    transfer.speed_hz = SPI_SPEED;
+    transfer.bits_per_word = SPI_BITS_PER_WORD;
+
+    PyObject * rx_list = PyList_New(rx_length);
+    if(rx_list == NULL)
+        return NULL;
+
+    rx_list_offset = 0;
+
+    while(rx_length == 0)
+    {
+        DEBUG("%s\n", "SPI Transfer");
+
+        if (ioctl(self->fd, SPI_IOC_MESSAGE(1), &transfer) < 1)
+        {
+            PyErr_SetFromErrno(PyExc_IOError);
+            return NULL;
+        }
+
+        i = 0;
+
+        while(i < MAX_TRANSFER_LENGTH)
+        {
+            if(rx_buf[i] != 0)
+            {
+                rx_length = rx_buf[i];
+                DEBUG("Found header at %d: %d\n", i, rx_length);
+
+                if(i + rx_length > MAX_TRANSFER_LENGTH)
+                {
+                    rx_remainder = (i + rx_length + 1) - MAX_TRANSFER_LENGTH;
+                    rx_length -= rx_remainder;
+                    DEBUG("Remainder: %d\n", rx_remainder);
+                }
+                else
+                {
+                    DEBUG("%s\n", "Buffer Complete");
+                    rx_remainder = 0;
+                }
+
+                if(extract_samples(rx_buf, i + 1, rx_list, rx_list_offset, rx_length) == -1)
+                {
+                    return NULL;
+                }
+
+                i += rx_length;
+                rx_list_offset += rx_length;
+
+                if(rx_remainder > 0)
+                {
+                    transfer.len = rx_remainder;
+
+                    if (ioctl(self->fd, SPI_IOC_MESSAGE(1), &transfer) < 1)
+                    {
+                        PyErr_SetFromErrno(PyExc_IOError);
+                        return NULL;
+                    }
+
+                    if(extract_samples(rx_buf, 0, rx_list, rx_list_offset, rx_remainder) == -1)
+                    {
+                        return NULL;
+                    };
+                }
+            }
+
+            i++;
+        }
+    }
+
+    Py_INCREF(rx_list);
+    return rx_list;
+}
+
 static PyMethodDef PiDAQ_methods[] = {
     { "open", (PyCFunction) PiDAQ_open, METH_VARARGS | METH_KEYWORDS, PiDAQ_open_doc },
     { "close", (PyCFunction) PiDAQ_close, METH_NOARGS, PiDAQ_close_doc },
+    { "get_samples", (PyCFunction) PiDAQ_get_samples, METH_NOARGS, PiDAQ_get_samples_doc },
     {NULL}  /* Sentinel */
 };
 
