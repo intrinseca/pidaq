@@ -17,7 +17,7 @@
 
 typedef unsigned char spi_word_t;
 
-//#define DEBUG_MODE
+#define DEBUG_MODE
 
 #ifdef DEBUG_MODE
 #define DEBUG(fmt, args...) printf(fmt, args)
@@ -175,7 +175,6 @@ PiDAQ_get_samples(PiDAQ *self)
 
     transfer.tx_buf = (unsigned long) tx_buf,
     transfer.rx_buf = (unsigned long) rx_buf;
-    transfer.len = MAX_TRANSFER_LENGTH;
     transfer.speed_hz = SPI_SPEED;
     transfer.bits_per_word = SPI_BITS_PER_WORD;
 
@@ -187,7 +186,9 @@ PiDAQ_get_samples(PiDAQ *self)
 
     while(rx_length == 0)
     {
-        DEBUG("%s\n", "SPI Transfer");
+
+        transfer.len = MAX_TRANSFER_LENGTH;
+        DEBUG("Transferring %d bytes\n", transfer.len);
 
         if (ioctl(self->fd, SPI_IOC_MESSAGE(1), &transfer) < 1)
         {
@@ -208,7 +209,7 @@ PiDAQ_get_samples(PiDAQ *self)
                 {
                     rx_remainder = (i + rx_length + 1) - MAX_TRANSFER_LENGTH;
                     rx_length -= rx_remainder;
-                    DEBUG("Remainder: %d\n", rx_remainder);
+                    DEBUG("Length: %3d Remainder: %3d\n", rx_length, rx_remainder);
                 }
                 else
                 {
@@ -227,6 +228,7 @@ PiDAQ_get_samples(PiDAQ *self)
                 if(rx_remainder > 0)
                 {
                     transfer.len = rx_remainder;
+                    DEBUG("Transferring %d bytes\n", transfer.len);
 
                     if (ioctl(self->fd, SPI_IOC_MESSAGE(1), &transfer) < 1)
                     {

@@ -26,5 +26,6 @@ try:
         
         samples += len(data)
         duration = time.time() - starttime
+        time.sleep(0.01)
 except KeyboardInterrupt:
     print("{} samples in {}, {}S/s".format(samples, duration, samples/duration))
