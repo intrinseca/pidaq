@@ -10,12 +10,12 @@
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 #define MAXPATH 16
-#define MAX_TRANSFER_LENGTH 1024
+#define MAX_TRANSFER_LENGTH 512
 
 #define SPI_SPEED 1000000
-#define SPI_BITS_PER_WORD 8
+#define SPI_BITS_PER_WORD 16
 
-typedef unsigned char spi_word_t;
+typedef uint16_t spi_word_t;
 
 #define DEBUG_MODE
 
@@ -36,6 +36,39 @@ static PyObject * PiDAQ_new(PyTypeObject *type, PyObject *args, PyObject *kwds);
 static int PiDAQ_init(PiDAQ *self, PyObject *args, PyObject *kwds);
 static PyObject * PiDAQ_open(PiDAQ *self, PyObject *args, PyObject *kwds);
 static PyObject * PiDAQ_close(PiDAQ *self);
+
+int extract_samples(spi_word_t* in, int in_offset, PyObject *list, int list_offset, int length)
+{
+    int i = 0;
+    PyObject *new;
+
+    while(i < length)
+    {
+        //Swap Endianness
+        //TODO: Error Checking
+        new = PyInt_FromLong(__bswap_16(in[i + in_offset]));
+        PyList_Append(list, new);
+        Py_DECREF(new);
+        i++;
+    }
+
+    return 0;
+}
+
+void print_array(const char* format, spi_word_t* array, int length)
+{
+    int i;
+
+    printf("Array (%d) -> [", length);
+
+    for(i = 0; i < length; i++)
+    {
+        printf(format, __bswap_16(array[i]));
+        printf(", ");
+    }
+
+    printf("%s", "]\n");
+}
 
 static void
 PiDAQ_dealloc(PiDAQ* self)
@@ -135,27 +168,6 @@ PyDoc_STRVAR(PiDAQ_get_samples_doc,
     "get_samples() -> [samples]\n\n"
     "Get a block of samples from the device.\n");
 
-int extract_samples(spi_word_t* in, int in_offset, PyObject *list, int list_offset, int length)
-{
-    int i = 0;
-    PyObject *new;
-
-    while(i < length)
-    {
-//        if(PyList_SetItem(list, i + list_offset, PyInt_FromLong(in[i + in_offset])) != 0)
-//        {
-//            PyErr_SetString(PyExc_RuntimeError, "Error putting received data item in list");
-//            return -1;
-//        }
-        new = PyInt_FromLong(in[i + in_offset]);
-        PyList_Append(list, new);
-        Py_DECREF(new);
-        i++;
-    }
-
-    return 0;
-}
-
 static PyObject *
 PiDAQ_get_samples(PiDAQ *self)
 {
@@ -168,7 +180,7 @@ PiDAQ_get_samples(PiDAQ *self)
     spi_word_t tx_buf[MAX_TRANSFER_LENGTH];
     spi_word_t rx_buf[MAX_TRANSFER_LENGTH];
 
-    memset(tx_buf, 0, MAX_TRANSFER_LENGTH);
+    memset(tx_buf, 0, sizeof(spi_word_t) * MAX_TRANSFER_LENGTH);
     memset(&transfer, 0, sizeof transfer);
 
     rx_length = 0;
@@ -186,8 +198,7 @@ PiDAQ_get_samples(PiDAQ *self)
 
     while(rx_length == 0)
     {
-
-        transfer.len = MAX_TRANSFER_LENGTH;
+        transfer.len = sizeof(spi_word_t) * MAX_TRANSFER_LENGTH;
         DEBUG("Transferring %d bytes\n", transfer.len);
 
         if (ioctl(self->fd, SPI_IOC_MESSAGE(1), &transfer) < 1)
@@ -202,8 +213,11 @@ PiDAQ_get_samples(PiDAQ *self)
         {
             if(rx_buf[i] != 0)
             {
-                rx_length = rx_buf[i];
+                //Swap Endianness
+                rx_length = __bswap_16(rx_buf[i]);
                 DEBUG("Found header at %d: %d\n", i, rx_length);
+
+                //print_array("%3d", &rx_buf[i], MAX_TRANSFER_LENGTH - i);
 
                 if(i + rx_length > MAX_TRANSFER_LENGTH)
                 {
@@ -227,7 +241,7 @@ PiDAQ_get_samples(PiDAQ *self)
 
                 if(rx_remainder > 0)
                 {
-                    transfer.len = rx_remainder;
+                    transfer.len = sizeof(spi_word_t) * rx_remainder;
                     DEBUG("Transferring %d bytes\n", transfer.len);
 
                     if (ioctl(self->fd, SPI_IOC_MESSAGE(1), &transfer) < 1)

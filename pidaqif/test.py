@@ -15,17 +15,20 @@ try:
         
         if samples <= 8 * 199:
             next = data[0]
+            
+        i = 0
         
         for d in data:
             if d <> next:
-                raise Exception("Data Loss, expecting {}, got {}".format(next, d))
+                raise Exception("Data Loss, expecting {}, got {} at offset {}".format(next, d, i))
             else:
                 next += 1
-                if next > 255:
+                if next > 1023:
                     next = 0
+            i += 1
         
         samples += len(data)
         duration = time.time() - starttime
-        time.sleep(0.01)
+        #time.sleep(0.01)
 except KeyboardInterrupt:
     print("{} samples in {}, {}S/s".format(samples, duration, samples/duration))
