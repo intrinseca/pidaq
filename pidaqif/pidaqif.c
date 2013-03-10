@@ -7,6 +7,8 @@
 #include <linux/spi/spidev.h>
 #include <linux/types.h>
 #include <sys/ioctl.h>
+#include <byteswap.h>
+#include <pthread.h>
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 #define MAXPATH 16
@@ -28,7 +30,10 @@ typedef uint16_t spi_word_t;
 typedef struct {
     PyObject_HEAD
     /* Type-specific fields go here. */
+    volatile int closing;
     int fd;
+    spi_word_t* rx_buf;
+    pthread_t rx_thread;
 } PiDAQ;
 
 static void PiDAQ_dealloc(PiDAQ* self);
@@ -55,6 +60,19 @@ int extract_samples(spi_word_t* in, int in_offset, PyObject *list, int list_offs
     return 0;
 }
 
+void* spi_read_thread(void* args)
+{
+    PiDAQ* self = (PiDAQ*) args;
+    DEBUG("%s\n", "Read Thread Running");
+    while(!self->closing)
+    {
+
+    }
+
+    DEBUG("%s\n", "Exiting Read Thread");
+    pthread_exit(0);
+}
+
 void print_array(const char* format, spi_word_t* array, int length)
 {
     int i;
@@ -74,6 +92,7 @@ static void
 PiDAQ_dealloc(PiDAQ* self)
 {
     PiDAQ_close(self);
+    free(self->rx_buf);
     self->ob_type->tp_free((PyObject*)self);
 }
 
@@ -85,6 +104,7 @@ PiDAQ_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     self = (PiDAQ *)type->tp_alloc(type, 0);
     if (self != NULL) {
         self->fd = -1;
+        self->rx_buf = malloc(MAX_TRANSFER_LENGTH * sizeof(spi_word_t));
     }
 
     return (PyObject *)self;
@@ -121,6 +141,7 @@ PiDAQ_open(PiDAQ *self, PyObject *args, PyObject *kwds)
     int bus, device;
     char path[MAXPATH];
     static char *kwlist[] = { "bus", "device", NULL };
+    pthread_attr_t attr;
 
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "ii:open", kwlist, &bus, &device))
     {
@@ -141,6 +162,14 @@ PiDAQ_open(PiDAQ *self, PyObject *args, PyObject *kwds)
         return NULL;
     }
 
+    if(pthread_attr_init(&attr) != 0)
+    {
+    	PyErr_SetString(PyExc_RuntimeError, "Couldn't create read thread attributes");
+    }
+
+    DEBUG("%s\n", "Starting Read Thread");
+    pthread_create(&self->rx_thread, NULL, spi_read_thread, self);
+
     Py_RETURN_NONE;
 }
 
@@ -152,6 +181,9 @@ static PyObject *
 PiDAQ_close(PiDAQ *self)
 {
     DEBUG("%s\n", "Closing Device");
+
+    self->closing = 1;
+    pthread_join(self->rx_thread, NULL);
 
     if ((self->fd != -1) && (close(self->fd) == -1))
     {

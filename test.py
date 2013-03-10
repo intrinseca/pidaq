@@ -32,3 +32,5 @@ try:
         #time.sleep(0.01)
 except KeyboardInterrupt:
     print("{} samples in {}, {}S/s".format(samples, duration, samples/duration))
+except Exception as e:
+    print(e)
