@@ -11,7 +11,11 @@ starttime = time.time()
 try:
     while True:
         data = p.get_samples()
+        print len(data)
         print("data ({}): {}".format(len(data), data))
+        
+        if len(data) == 0:
+            continue
         
         if samples <= 8 * 199:
             next = data[0]
@@ -32,5 +36,3 @@ try:
         #time.sleep(0.01)
 except KeyboardInterrupt:
     print("{} samples in {}, {}S/s".format(samples, duration, samples/duration))
-except Exception as e:
-    print(e)
