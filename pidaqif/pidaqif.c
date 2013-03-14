@@ -98,7 +98,6 @@ void* spi_read_thread(void* args)
 
     while(!self->closing)
     {
-        pthread_mutex_lock(&self->sample_buf_mutex);
         DEBUG("Transferring %d bytes\n", transfer.len);
 
         if (ioctl(self->fd, SPI_IOC_MESSAGE(1), &transfer) < 1)
@@ -106,15 +105,18 @@ void* spi_read_thread(void* args)
             pthread_exit((void*)-1);
         }
 
-        self->sample_count = 0;
+        pthread_mutex_lock(&self->sample_buf_mutex);
+
         i = 0;
+
+        //TODO: Check for overflow
 
         if(rx_remainder > 0)
         {
             DEBUG("Copying Leftover (%d of %d)\n", (rx_length - rx_remainder), rx_length);
-            memcpy(self->sample_buf, rx_temp, sizeof(spi_word_t) * (rx_length - rx_remainder));
+            memcpy(&self->sample_buf[self->sample_count], rx_temp, sizeof(spi_word_t) * (rx_length - rx_remainder));
             DEBUG("Copying Remainder (%d of %d)\n", rx_remainder, rx_length);
-            memcpy(&self->sample_buf[rx_length - rx_remainder], rx_buf, sizeof(spi_word_t) * rx_remainder);
+            memcpy(&self->sample_buf[self->sample_count + rx_length - rx_remainder], rx_buf, sizeof(spi_word_t) * rx_remainder);
             self->sample_count += rx_length;
             i = rx_remainder;
             rx_remainder = 0;
@@ -211,7 +213,7 @@ PiDAQ_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     if (self != NULL) {
         self->fd = -1;
         self->closing = 0;
-        self->sample_buf = malloc(MAX_TRANSFER_LENGTH * sizeof(spi_word_t));
+        self->sample_buf = malloc(MAX_TRANSFER_LENGTH * sizeof(spi_word_t) * 10);
         sem_init(&self->samples_available, 0, 0);
         pthread_mutex_init(&self->sample_buf_mutex, NULL);
     }
@@ -322,7 +324,7 @@ PiDAQ_get_samples(PiDAQ *self)
         return NULL;
     DEBUG_STR("Getting Samples\n");
     extract_samples(self->sample_buf, 0, rx_list, 0, self->sample_count);
-
+    self->sample_count = 0;
     DEBUG_STR("Unlocking\n");
     pthread_mutex_unlock(&self->sample_buf_mutex);
 
