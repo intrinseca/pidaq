@@ -16,9 +16,10 @@ class SPISource(Source):
     def sample(self):
         while not self.stopping:
             data = self._pidaq.get_samples()
-            print("data ({}): {:3} ({:3}) {:3}".format(len(data), data[0], data[len(data) - 1] - data[0], data[len(data) - 1]))
-            if self.sink is not None:
-                self.sink(data)
+            if len(data) > 0:
+                print("data ({}): {:3} ({:3}) {:3}".format(len(data), data[0], data[len(data) - 1] - data[0], data[len(data) - 1]))
+                if self.sink is not None:
+                    self.sink(data)
 
     def stop(self):
         self.stopping = True

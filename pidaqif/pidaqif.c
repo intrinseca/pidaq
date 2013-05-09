@@ -72,6 +72,7 @@ void* spi_read_thread(void* args)
     int i;
     int rx_length;
     int rx_remainder;
+    int have_lock = 0;
 
     struct spi_ioc_transfer transfer;
 
@@ -98,14 +99,19 @@ void* spi_read_thread(void* args)
 
     while(!self->closing)
     {
-        DEBUG("Transferring %d bytes\n", transfer.len);
+        DEBUG("\nT %4d ", transfer.len);
 
         if (ioctl(self->fd, SPI_IOC_MESSAGE(1), &transfer) < 1)
         {
+            DEBUG_STR("SPI ioctl failed, exiting read thread");
             pthread_exit((void*)-1);
         }
 
-        pthread_mutex_lock(&self->sample_buf_mutex);
+        if(!have_lock)
+        {
+            pthread_mutex_lock(&self->sample_buf_mutex);
+            have_lock = 1;
+        }
 
         i = 0;
 
@@ -113,9 +119,9 @@ void* spi_read_thread(void* args)
 
         if(rx_remainder > 0)
         {
-            DEBUG("Copying Leftover (%d of %d)\n", (rx_length - rx_remainder), rx_length);
+            DEBUG("L %4d ", (rx_length - rx_remainder));
             memcpy(&self->sample_buf[self->sample_count], rx_temp, sizeof(spi_word_t) * (rx_length - rx_remainder));
-            DEBUG("Copying Remainder (%d of %d)\n", rx_remainder, rx_length);
+            DEBUG("R %4d ", rx_remainder);
             memcpy(&self->sample_buf[self->sample_count + rx_length - rx_remainder], rx_buf, sizeof(spi_word_t) * rx_remainder);
             self->sample_count += rx_length;
             i = rx_remainder;
@@ -124,12 +130,13 @@ void* spi_read_thread(void* args)
 
         while(i < MAX_TRANSFER_LENGTH)
         {
-            if(rx_buf[i] != 0)
+            //Length has high bit set (which is currently swapped in order)
+            if((rx_buf[i] & 0x0080) == 0x0080)
             {
-                //Swap Endianness
-                rx_length = __bswap_16(rx_buf[i]);
-                DEBUG("Currently have %d samples\n", self->sample_count);
-                DEBUG("Found header at %d: %d\n", i, rx_length);
+                //Swap Endianness, clear high bit
+                rx_length = __bswap_16(rx_buf[i]) & ~0x8000;
+                DEBUG("G %4d ", self->sample_count);
+                DEBUG("H %4d  (%4d) ", i, rx_length);
                 i++;
 
                 if(rx_length > MAX_TRANSFER_LENGTH)
@@ -140,17 +147,16 @@ void* spi_read_thread(void* args)
                 if(i + rx_length > MAX_TRANSFER_LENGTH)
                 {
                     rx_remainder = (i + rx_length) - MAX_TRANSFER_LENGTH;
-                    DEBUG("Length: %3d Remainder: %3d\n", rx_length, rx_remainder);
+                    DEBUG("R %4d ", rx_remainder);
 
                     memcpy(rx_temp, &rx_buf[i], sizeof(spi_word_t) * (rx_length - rx_remainder));
 
-                    DEBUG_STR("Copied to temp\n");
                     i += rx_length;
                 }
                 else
                 {
                     rx_remainder = 0;
-                    DEBUG("%s\n", "Buffer Complete");
+                    DEBUG("%s", "B ");
 
                     memcpy(&self->sample_buf[self->sample_count], &rx_buf[i], sizeof(spi_word_t) * rx_length);
 
@@ -164,11 +170,10 @@ void* spi_read_thread(void* args)
             }
         }
 
-        pthread_mutex_unlock(&self->sample_buf_mutex);
-
         if(self->sample_count > 0)
         {
-            sem_post(&self->samples_available);
+            have_lock = 0;
+            pthread_mutex_unlock(&self->sample_buf_mutex);
         }
     }
 
@@ -314,10 +319,10 @@ PyDoc_STRVAR(PiDAQ_get_samples_doc,
 static PyObject *
 PiDAQ_get_samples(PiDAQ *self)
 {
-    DEBUG_STR("Waiting\n");
-    sem_wait(&self->samples_available);
+    Py_BEGIN_ALLOW_THREADS
     DEBUG_STR("Locking\n");
     pthread_mutex_lock(&self->sample_buf_mutex);
+    Py_END_ALLOW_THREADS
 
     PyObject * rx_list = PyList_New(self->sample_count);
     if(rx_list == NULL)
