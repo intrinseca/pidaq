@@ -209,6 +209,7 @@ class BlockPool:
     
     def release(self, block):
         if block.persist:
+            print("!!QQ!!")
             self.write_queue.put(block)
         
         block.locked = False
@@ -223,10 +224,12 @@ class BlockPool:
                 block = self.write_queue.get(timeout=0.5)
             except Empty:
                 pass
-            else:            
+            else:
                 stream_file = open(os.path.join(self.file_root, str(block.block_id)), "wb")
+                print("!!WR!!")  
                 stream_file.write(block.serialize())
                 stream_file.close()
+                print("!!CP!!")
                 
                 block.written = True
                 

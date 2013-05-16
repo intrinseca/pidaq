@@ -10,15 +10,21 @@
 #include <byteswap.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <errno.h>
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 #define MAXPATH 16
 #define MAX_TRANSFER_LENGTH 512
 
 #define SPI_SPEED 1000000
-#define SPI_BITS_PER_WORD 16
+//The STM32 is sending in 16 bit per word mode, but the RPi only supports
+//up to 8. Luckily, receiving twice as many 8 bit words works just the same.
+//This parameter was not error checked when the code was first written
+#define SPI_BITS_PER_WORD 8
 
 typedef uint16_t spi_word_t;
+
+#define SAMPLE_BUFFER_LEN MAX_TRANSFER_LENGTH * sizeof(spi_word_t) * 10
 
 #define DEBUG_MODE
 
@@ -42,6 +48,7 @@ typedef struct {
     pthread_mutex_t sample_buf_mutex;
     sem_t samples_available;
     pthread_t rx_thread;
+    volatile unsigned int rx_thread_error;
 } PiDAQ;
 
 static void PiDAQ_dealloc(PiDAQ* self);
@@ -67,6 +74,14 @@ int extract_samples(spi_word_t* in, int in_offset, PyObject *list, int list_offs
     return 0;
 }
 
+void read_thread_error(PiDAQ* self, const char * message)
+{
+    DEBUG_STR(message);
+    DEBUG_STR(strerror(errno));
+    DEBUG_STR("\n");
+    self->rx_thread_error = 1;
+}
+
 void* spi_read_thread(void* args)
 {
     int i;
@@ -76,14 +91,33 @@ void* spi_read_thread(void* args)
 
     struct spi_ioc_transfer transfer;
 
+    PiDAQ* self = (PiDAQ*) args;
+
     DEBUG_STR("Initialising Read Thread\n");
 
     spi_word_t* tx_buf = malloc(MAX_TRANSFER_LENGTH * sizeof(spi_word_t));
+    if(tx_buf == NULL)
+    {
+        read_thread_error(self, "Cannot allocate tx_buf");
+        pthread_exit((void*)-1);
+    }
+
     spi_word_t* rx_buf = malloc(MAX_TRANSFER_LENGTH * sizeof(spi_word_t));
+    if(rx_buf == NULL)
+    {
+        read_thread_error(self, "Cannot allocate rx_buf");
+        pthread_exit((void*)-1);
+    }
+
     spi_word_t* rx_temp = malloc(MAX_TRANSFER_LENGTH * sizeof(spi_word_t));
+    if(rx_temp == NULL)
+    {
+        read_thread_error(self, "Cannot allocate rx_temp");
+        pthread_exit((void*)-1);
+    }
 
     memset(tx_buf, 0, sizeof(spi_word_t) * MAX_TRANSFER_LENGTH);
-    memset(&transfer, 0, sizeof transfer);
+    memset(&transfer, 0, sizeof(transfer));
 
     rx_remainder = 0;
     rx_length = 0;
@@ -94,7 +128,6 @@ void* spi_read_thread(void* args)
     transfer.bits_per_word = SPI_BITS_PER_WORD;
     transfer.len = sizeof(spi_word_t) * MAX_TRANSFER_LENGTH;
 
-    PiDAQ* self = (PiDAQ*) args;
     DEBUG("%s\n", "Read Thread Running");
 
     while(!self->closing)
@@ -103,7 +136,7 @@ void* spi_read_thread(void* args)
 
         if (ioctl(self->fd, SPI_IOC_MESSAGE(1), &transfer) < 1)
         {
-            DEBUG_STR("SPI ioctl failed, exiting read thread");
+            read_thread_error(self, "SPI ioctl failed: ");
             pthread_exit((void*)-1);
         }
 
@@ -115,13 +148,19 @@ void* spi_read_thread(void* args)
 
         i = 0;
 
-        //TODO: Check for overflow
+        //TODO: Error on overflow, currently just resets
 
         if(rx_remainder > 0)
         {
-            DEBUG("L %4d ", (rx_length - rx_remainder));
+            if(self->sample_count + rx_length > SAMPLE_BUFFER_LEN)
+            {
+                DEBUG_STR("!!OO!! ");
+                self->sample_count = 0;
+            }
+
+            DEBUG("< %4d ", (rx_length - rx_remainder));
             memcpy(&self->sample_buf[self->sample_count], rx_temp, sizeof(spi_word_t) * (rx_length - rx_remainder));
-            DEBUG("R %4d ", rx_remainder);
+            DEBUG("> %4d ", rx_remainder);
             memcpy(&self->sample_buf[self->sample_count + rx_length - rx_remainder], rx_buf, sizeof(spi_word_t) * rx_remainder);
             self->sample_count += rx_length;
             i = rx_remainder;
@@ -136,7 +175,7 @@ void* spi_read_thread(void* args)
                 //Swap Endianness, clear high bit
                 rx_length = __bswap_16(rx_buf[i]) & ~0x8000;
                 DEBUG("G %4d ", self->sample_count);
-                DEBUG("H %4d  (%4d) ", i, rx_length);
+                DEBUG("H %4d @ %4d ", rx_length, i);
                 i++;
 
                 if(rx_length > MAX_TRANSFER_LENGTH)
@@ -157,6 +196,12 @@ void* spi_read_thread(void* args)
                 {
                     rx_remainder = 0;
                     DEBUG("%s", "B ");
+
+                    if(self->sample_count + rx_length > SAMPLE_BUFFER_LEN)
+                    {
+                        DEBUG_STR("OOOOOO ");
+                        self->sample_count = 0;
+                    }
 
                     memcpy(&self->sample_buf[self->sample_count], &rx_buf[i], sizeof(spi_word_t) * rx_length);
 
@@ -218,12 +263,13 @@ PiDAQ_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     if (self != NULL) {
         self->fd = -1;
         self->closing = 0;
-        self->sample_buf = malloc(MAX_TRANSFER_LENGTH * sizeof(spi_word_t) * 10);
+        self->sample_buf = malloc(SAMPLE_BUFFER_LEN);
+        self->rx_thread_error = 0;
         sem_init(&self->samples_available, 0, 0);
         pthread_mutex_init(&self->sample_buf_mutex, NULL);
     }
 
-    DEBUG_STR("Type Initialised");
+    DEBUG_STR("Type Initialised\n");
     return (PyObject *)self;
 }
 
@@ -284,7 +330,10 @@ PiDAQ_open(PiDAQ *self, PyObject *args, PyObject *kwds)
     self->sample_count = 0;
     //TODO: Error Handling
     DEBUG("%s\n", "Starting Read Thread\n");
-    pthread_create(&self->rx_thread, NULL, spi_read_thread, self);
+    if(pthread_create(&self->rx_thread, NULL, spi_read_thread, self) != 0)
+    {
+        PyErr_SetFromErrno(PyExc_IOError);
+    }
 
     Py_RETURN_NONE;
 }
@@ -319,18 +368,24 @@ PyDoc_STRVAR(PiDAQ_get_samples_doc,
 static PyObject *
 PiDAQ_get_samples(PiDAQ *self)
 {
+    if(self->rx_thread_error)
+    {
+        PyErr_SetString(PyExc_IOError, "Error in SPI Read Thread");
+        return NULL;
+    }
+
     Py_BEGIN_ALLOW_THREADS
-    DEBUG_STR("Locking\n");
+    DEBUG_STR("l      ");
     pthread_mutex_lock(&self->sample_buf_mutex);
     Py_END_ALLOW_THREADS
 
     PyObject * rx_list = PyList_New(self->sample_count);
     if(rx_list == NULL)
         return NULL;
-    DEBUG_STR("Getting Samples\n");
+    DEBUG("g %4d ", self->sample_count);
     extract_samples(self->sample_buf, 0, rx_list, 0, self->sample_count);
     self->sample_count = 0;
-    DEBUG_STR("Unlocking\n");
+    DEBUG_STR("u      ");
     pthread_mutex_unlock(&self->sample_buf_mutex);
 
     return rx_list;
