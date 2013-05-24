@@ -19,7 +19,8 @@ class SPISource(Source):
             if len(data) > 0:
                 print("data ({}): {:3} ({:3}) {:3}".format(len(data), data[0], data[len(data) - 1] - data[0], data[len(data) - 1]))
                 if self.sink is not None:
-                    self.sink(data)
+                    for i in range(0,4):
+                        self.sink(data[i::4], i)
 
     def stop(self):
         self.stopping = True

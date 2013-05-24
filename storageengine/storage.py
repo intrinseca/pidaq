@@ -25,11 +25,12 @@ class Session:
         self.blocks = []
         self.block_size = Block.size
         self.block_pool = None
-        self._current_block = None
+        self._current_blocks = [None, None, None, None]
     
     def start(self):
         self.running = True
-        self._new_block()
+        for i in range(0,4):            
+            self._new_block(i)
 
     def stop(self):
         if self.persistent:
@@ -37,31 +38,37 @@ class Session:
             stream_file.write(self.serialize())
             stream_file.close()
         
-        self.block_pool.release(self._current_block)
+        for i in range(0,4):            
+            self.block_pool.release(self._current_blocks[i])
+        
         self.running = False
     
-    def _new_block(self):
-        if self._current_block:
-            self.block_pool.release(self._current_block)
-                
-        self._current_block = self.block_pool.new_block()
-        self._current_block.session_id = self.sid
-        self._current_block.machine_id = self.machine_id
-        self._current_block.timestamp = self.sample_count
-        self._current_block.persist = self.persistent
+    def _new_block(self, channel):
+        block = self._current_blocks[channel]
+        if block:
+            self.block_pool.release(block)
         
-        self.blocks.append(self._current_block.block_id)
+        block = self.block_pool.new_block()
+        block.session_id = self.sid
+        block.machine_id = self.machine_id
+        block.timestamp = self.sample_count
+        block.persist = self.persistent
+        block.channel = channel
+        
+        self.blocks.append(block.block_id)
+        self._current_blocks[channel] = block
     
-    def add_samples(self, samples):
+    def add_samples(self, samples, channel):
         assert(self.running == True)
         
         i = 0
         while i < len(samples):
-            if self._current_block.full():
-                self.sample_count += len(self._current_block.samples)
-                self._new_block()
+            if self._current_blocks[channel].full():
+                if channel == 3:
+                    self.sample_count += len(self._current_blocks[channel].samples)
+                self._new_block(channel)
             
-            self._current_block.samples.append(samples[i])
+            self._current_blocks[channel].samples.append(samples[i])
             i += 1
     
     def query(self, start=0, end=None):
@@ -256,11 +263,11 @@ class StorageEngine():
     def _make_live_session(self):
         self.start_session(UUID(int=0), persistent=False)
     
-    def add_samples(self, samples):
-        if self.session is not None and self.session.running:
+    def add_samples(self, samples, channel):
+        if self.session is not None and self.session.running and channel == 0:
             self.live_stream.send_samples(samples)
             
-            self.session.add_samples(samples)
+        self.session.add_samples(samples, channel)
     
     def set_source(self, store):
         self.store = store
