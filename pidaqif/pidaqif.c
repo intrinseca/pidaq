@@ -18,8 +18,9 @@
 
 #define SPI_SPEED 1000000
 //The STM32 is sending in 16 bit per word mode, but the RPi only supports
-//up to 8. Luckily, receiving twice as many 8 bit words works just the same.
+//up to 8. Luckily, receiving twice as many 8 bit words works almost the same.
 //This parameter was not error checked when the code was first written
+//(This causes the need to swap the bytes)
 #define SPI_BITS_PER_WORD 8
 
 typedef uint16_t spi_word_t;
@@ -42,6 +43,12 @@ typedef struct {
     volatile int closing;
     int fd;
 
+    unsigned char digital_in;
+
+    unsigned char digital_mask;
+    unsigned char digital_conf;
+    unsigned char digital_out;
+
     spi_word_t* sample_buf;
     int sample_count;
 
@@ -60,18 +67,34 @@ static PyObject * PiDAQ_close(PiDAQ *self);
 int extract_samples(spi_word_t* in, int in_offset, PyObject *list, int list_offset, int length)
 {
     int i = 0;
+    spi_word_t sample;
     PyObject *new;
 
     while(i < length)
     {
         //Swap Endianness
         //TODO: Error Checking
-        new = PyInt_FromLong(__bswap_16(in[i + in_offset]));
+        //Swap the bytes
+        sample = __bswap_16(in[i + in_offset]);
+
+        //Mask off header
+        new = PyInt_FromLong(sample & ~0xF000);
         PyList_SetItem(list, i, new);
         i++;
     }
 
     return 0;
+}
+
+char extract_digital(spi_word_t* in)
+{
+    char result = 0;
+
+    result |= (__bswap_16(in[0]) & 0x7000) >> 7;
+    result |= (__bswap_16(in[1]) & 0x7000) >> 10;
+    result |= (__bswap_16(in[2]) & 0x7000) >> 13;
+
+    return result;
 }
 
 void read_thread_error(PiDAQ* self, const char * message)
@@ -134,6 +157,11 @@ void* spi_read_thread(void* args)
     {
         DEBUG("\nT %4d ", transfer.len);
 
+        //Set the tx_buf for transmitted commands
+        tx_buf[0] = __bswap_16(0x8000 | self->digital_mask); //Set mask
+        tx_buf[1] = __bswap_16(0xA000 | self->digital_conf); //Set configuration
+        tx_buf[2] = __bswap_16(0xC000 | self->digital_out); //Set data
+
         if (ioctl(self->fd, SPI_IOC_MESSAGE(1), &transfer) < 1)
         {
             read_thread_error(self, "SPI ioctl failed: ");
@@ -162,6 +190,11 @@ void* spi_read_thread(void* args)
             memcpy(&self->sample_buf[self->sample_count], rx_temp, sizeof(spi_word_t) * (rx_length - rx_remainder));
             DEBUG("> %4d ", rx_remainder);
             memcpy(&self->sample_buf[self->sample_count + rx_length - rx_remainder], rx_buf, sizeof(spi_word_t) * rx_remainder);
+
+            //Extract digital input
+            self->digital_in = extract_digital(&self->sample_buf[self->sample_count]);
+
+            //Update start pointer
             self->sample_count += rx_length;
             i = rx_remainder;
             rx_remainder = 0;
@@ -169,11 +202,11 @@ void* spi_read_thread(void* args)
 
         while(i < MAX_TRANSFER_LENGTH)
         {
-            //Length has high bit set (which is currently swapped in order)
+            //Length has high bit set (which is swapped in order)
             if((rx_buf[i] & 0x0080) == 0x0080)
             {
-                //Swap Endianness, clear high bit
-                rx_length = __bswap_16(rx_buf[i]) & ~0x8000;
+                //Swap Endianness, mask off header bits
+                rx_length = __bswap_16(rx_buf[i]) & ~0xF000;
                 DEBUG("G %4d ", self->sample_count);
                 DEBUG("H %4d @ %4d ", rx_length, i);
                 i++;
@@ -205,6 +238,10 @@ void* spi_read_thread(void* args)
 
                     memcpy(&self->sample_buf[self->sample_count], &rx_buf[i], sizeof(spi_word_t) * rx_length);
 
+                    //Extract digital input
+                    self->digital_in = extract_digital(&self->sample_buf[self->sample_count]);
+
+                    //Update start pointer
                     self->sample_count += rx_length;
                     i += rx_length;
                 }
@@ -263,6 +300,12 @@ PiDAQ_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     if (self != NULL) {
         self->fd = -1;
         self->closing = 0;
+
+        self->digital_in = 0;
+        self->digital_mask = 0;
+        self->digital_conf = 0;
+        self->digital_out = 0;
+
         self->sample_buf = malloc(SAMPLE_BUFFER_LEN);
         self->rx_thread_error = 0;
         sem_init(&self->samples_available, 0, 0);
@@ -391,10 +434,61 @@ PiDAQ_get_samples(PiDAQ *self)
     return rx_list;
 }
 
+PyDoc_STRVAR(PiDAQ_get_digital_in_doc,
+        "get_digital_in() -> value\n\n"
+        "Get the most recent value of the digital inputs on the device.\n");
+
+static PyObject *
+PiDAQ_get_digital_in(PiDAQ *self)
+{
+    Py_BEGIN_ALLOW_THREADS
+    pthread_mutex_lock(&self->sample_buf_mutex);
+    Py_END_ALLOW_THREADS
+
+    PyObject * ret = PyInt_FromLong(self->digital_in);
+
+    pthread_mutex_unlock(&self->sample_buf_mutex);
+
+    return ret;
+}
+
+PyDoc_STRVAR(PiDAQ_set_digital_out_doc,
+        "set_digital_out(data, [mask, [configuration]])\n\n"
+        "Set the data and configuration of the digital port\n");
+
+static PyObject *
+PiDAQ_set_digital_out(PiDAQ *self, PyObject *args, PyObject *kwds)
+{
+    char mask, conf, data;
+    static char *kwlist[] = {"data", "mask", "configuration", NULL };
+
+    mask = 0;
+    conf = 0;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "b|bb:set_digital_out", kwlist, &data, &mask, &conf))
+    {
+        return NULL;
+    }
+
+    Py_BEGIN_ALLOW_THREADS
+    pthread_mutex_lock(&self->sample_buf_mutex);
+    Py_END_ALLOW_THREADS
+
+    self->digital_mask = mask;
+    self->digital_conf = conf;
+    self->digital_out = data;
+
+    pthread_mutex_unlock(&self->sample_buf_mutex);
+
+    Py_RETURN_NONE;
+}
+
 static PyMethodDef PiDAQ_methods[] = {
         { "open", (PyCFunction) PiDAQ_open, METH_VARARGS | METH_KEYWORDS, PiDAQ_open_doc },
         { "close", (PyCFunction) PiDAQ_close, METH_NOARGS, PiDAQ_close_doc },
         { "get_samples", (PyCFunction) PiDAQ_get_samples, METH_NOARGS, PiDAQ_get_samples_doc },
+        { "get_digital_in", (PyCFunction) PiDAQ_get_digital_in, METH_NOARGS, PiDAQ_get_digital_in_doc },
+        { "set_digital_out", (PyCFunction) PiDAQ_set_digital_out, METH_VARARGS | METH_KEYWORDS, PiDAQ_set_digital_out_doc },
         {NULL}  /* Sentinel */
 };
 

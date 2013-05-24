@@ -8,14 +8,19 @@ samples = 0
 
 starttime = time.time()
 
+p.set_digital_out(0x56, 0xFF)
+
 try:
     while True:
         data = p.get_samples()
-        print len(data)
-        print("data ({}): {}".format(len(data), data))
+        digital_in = p.get_digital_in();
+        
         
         if len(data) == 0:
             continue
+        
+        print("data ({}): {}".format(len(data), data))
+        print("digital in: {:2X}".format(digital_in));
         
         if samples <= 8 * 199:
             next = data[0]
