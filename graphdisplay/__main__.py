@@ -12,8 +12,10 @@ for folder in sessions:
     print("  %d. %s" % (i, folder))
     i += 1
 
-#session chooser
-session_index = sessions[2]
+
+session_num = int(raw_input("Input a session number: "))
+
+session_index = sessions[session_num - 1]
 
 path = os.path.join(os.getcwd(), "storage")
 session_index_file = open(os.path.join(path, session_index), "rb")
