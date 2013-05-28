@@ -22,7 +22,7 @@ class Session:
         self.sample_count = 0
         self.machine_id = machine_id()
             
-        self.blocks = []
+        self.blocks = [[],[],[],[]]
         self.block_size = Block.size
         self.block_pool = None
         self._current_blocks = [None, None, None, None]
@@ -55,7 +55,7 @@ class Session:
         block.persist = self.persistent
         block.channel = channel
         
-        self.blocks.append(block.block_id)
+        self.blocks[channel].append(block.block_id)
         self._current_blocks[channel] = block
     
     def add_samples(self, samples, channel):
@@ -71,17 +71,17 @@ class Session:
             self._current_blocks[channel].samples.append(samples[i])
             i += 1
     
-    def query(self, start=0, end=None):
+    def query(self, start=0, end=None, channel=0):
         samples = []
         
         start_block = int(math.floor(start / Block.size))
         
         if not end:
             end_block = len(self.blocks) - 1
-            blocks = self.blocks[start_block:]
+            blocks = self.blocks[channel][start_block:]
         else:
             end_block = int(math.ceil(end / Block.size))
-            blocks = self.blocks[start_block:end_block + 1]
+            blocks = self.blocks[channel][start_block:end_block + 1]
         
         for block_id in blocks:
             block = self.block_pool.get(block_id, mem_only=not self.persistent)
@@ -94,7 +94,12 @@ class Session:
     def serialize(self):
         session = samples_pb2.session()
         session.session_id = self.sid.bytes
-        session.blocks.extend(map(lambda x: x.bytes, self.blocks))
+        
+        for i in range(0,4):
+            channel = session.channels.add()
+            channel.channel_number = i
+            channel.blocks.extend(map(lambda x: x.bytes, self.blocks[i]))
+        
         return session.SerializeToString()
         # return text_format.MessageToString(session)
     
@@ -105,7 +110,9 @@ class Session:
         # text_format.Merge(serialized, session_pb)
         
         session = Session(UUID(bytes=session_pb.session_id), persistent=True)
-        session.blocks = map(lambda x: UUID(bytes=x), session_pb.blocks)
+        
+        for channel in session_pb.channels:
+            session.blocks[channel.channel_number] = map(lambda x: UUID(bytes=x), channel.blocks)
         
         return session
 
