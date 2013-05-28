@@ -83,21 +83,10 @@ class StorageEngineControlFactory(ReconnectingClientFactory):
         command.storage_command.stop_session = True
         self.protocol.sendMessage(command)
     
-    def get_data(self):
-        if self.protocol.connected:
-            command = network_message()
-            command.storage_command.show_data = True
-            
-            start = self.sample_head - self.window_width
-            if start < 0:
-                start = 0
-            
-            command.storage_command.start_sample = start
-            self.protocol.sendMessage(command)
-    
     def start_refresh(self):
-        self._timer = LoopingCall(self.get_data)
+        #self._timer = LoopingCall(self.get_data)
         #self._timer.start(1.0 / 30.0)
+        pass
     
     def stop_refresh(self):
         self._timer.stop()

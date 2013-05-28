@@ -20,14 +20,12 @@ class ControlWindow(wx.Frame):
         self.canvas = PlotCanvas(panel)
         self.canvas.SetEnableAntiAliasing(True)
         
-        btnStart = wx.Button(panel, label="Start")
-        btnStop = wx.Button(panel, label="Stop")
-        btnShow = wx.Button(panel, label="Show")
+        btnStart = wx.Button(panel, label="Start Session")
+        btnStop = wx.Button(panel, label="Stop Session")
         self.lblFPS = wx.StaticText(panel, label="000 FPS")
         
         control_sizer.Add(btnStart, flag=wx.ALL, border=3)
         control_sizer.Add(btnStop, flag=wx.ALL, border=3)
-        control_sizer.Add(btnShow, flag=wx.ALL, border=3)
         control_sizer.Add(self.lblFPS, flag=wx.ALL, border=3)
         
         top_sizer.Add(self.canvas, 1, wx.EXPAND | wx.ALL, 3)
@@ -46,7 +44,6 @@ class ControlWindow(wx.Frame):
         
         btnStart.Bind(wx.EVT_BUTTON, self.btnStart_Click)
         btnStop.Bind(wx.EVT_BUTTON, self.btnStop_Click)
-        btnShow.Bind(wx.EVT_BUTTON, self.btnShow_Click)
     
         panel.SetSizer(top_sizer)
     
@@ -69,7 +66,7 @@ class ControlWindow(wx.Frame):
         y = numpy.resize(data, (len(x), 1))
         z = numpy.append(x, y, axis=1)
         line = PolyLine(z, colour='blue', width=1.5)
-        self.canvas.Draw(PlotGraphics([line]), xAxis=(-self.live_buffer.maxlen, 0), yAxis=(0,1024))
+        self.canvas.Draw(PlotGraphics([line]), xAxis=(-self.live_buffer.maxlen, 0), yAxis=(0,4095))
         self.frames += 1
     
     def downsample(self, samples, downsample_factor):
@@ -88,6 +85,3 @@ class ControlWindow(wx.Frame):
     
     def btnStop_Click(self, event=None):
         self.control.stop_session()
-    
-    def btnShow_Click(self, event=None):
-        self.control.get_data()
