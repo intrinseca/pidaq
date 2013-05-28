@@ -20,21 +20,21 @@ try:
             continue
         
         print("data ({}): {}".format(len(data), data))
-        print("digital in: {:2X}".format(digital_in));
+        #print("digital in: {:2X}".format(digital_in));
         
-        if samples <= 8 * 199:
-            next = data[0]
+        #if samples <= 8 * 199:
+        #    next = data[0]
             
-        i = 0
+        #i = 0
         
-        for d in data:
-            if d <> next:
-                raise Exception("Data Loss, expecting {}, got {} at offset {}".format(next, d, i))
-            else:
-                next += 1
-                if next > 1023:
-                    next = 0
-            i += 1
+        #for d in data:
+        #    if d <> next:
+        #        raise Exception("Data Loss, expecting {}, got {} at offset {}".format(next, d, i))
+        #    else:
+        #        next += 1
+        #        if next > 1023:
+        #            next = 0
+        #    i += 1
         
         samples += len(data)
         duration = time.time() - starttime
